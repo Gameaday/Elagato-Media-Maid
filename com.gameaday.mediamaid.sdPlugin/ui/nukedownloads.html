@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nuke Downloads – MediaMaid</title>
+  <link rel="stylesheet" href="mediamaid.css">
+</head>
+<body>
+  <div class="sdpi-wrapper">
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-label" for="folderPath">Target Folder</label>
+      <input type="text" id="folderPath" placeholder="/Users/you/Downloads">
+      <div id="pathStatus"></div>
+    </div>
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-label">Categories Created</label>
+      <div class="categories">
+        <strong>Images</strong> · jpg, png, gif, heic, raw, webp…<br>
+        <strong>Videos</strong> · mp4, mkv, avi, mov, wmv, webm…<br>
+        <strong>Audio</strong> · mp3, flac, aac, ogg, wav, m4a…<br>
+        <strong>Documents</strong> · pdf, doc, docx, xls, txt, md…<br>
+        <strong>eBooks</strong> · epub, mobi, azw, cbz, cbr…<br>
+        <strong>Installers</strong> · exe, msi, dmg, pkg, iso…<br>
+        <strong>Archives</strong> · zip, rar, 7z, tar, gz…<br>
+        <strong>Code</strong> · js, ts, py, java, go, rs…<br>
+        <strong>Other</strong> · everything else
+      </div>
+    </div>
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-check">
+        <input type="checkbox" id="createOtherFolder" checked>
+        Create "Other" folder for unrecognised files
+      </label>
+    </div>
+
+    <hr class="sdpi-divider">
+
+    <div class="sdpi-info">
+      <strong>Short press</strong> – sort files into subfolders<br>
+      <strong>Long press (&gt;0.5 s)</strong> – dry run (preview in log)<br>
+      <strong>Dial rotate</strong> – browse categories
+    </div>
+
+  </div>
+
+  <script>
+    const folderPathEl  = document.getElementById("folderPath");
+    const createOtherEl = document.getElementById("createOtherFolder");
+    const pathStatusEl  = document.getElementById("pathStatus");
+
+    function validatePath() {
+      const path = folderPathEl.value.trim();
+      if (!path) { pathStatusEl.className = ""; pathStatusEl.textContent = ""; }
+      else if (!path.startsWith("/") && !path.match(/^[A-Za-z]:\\/)) {
+        pathStatusEl.className = "sdpi-warning";
+        pathStatusEl.textContent = "Path should be absolute.";
+      } else {
+        pathStatusEl.className = "sdpi-success";
+        pathStatusEl.textContent = "Ready.";
+      }
+    }
+
+    function loadSettings(s) {
+      if (s.folderPath !== undefined) folderPathEl.value = s.folderPath;
+      if (s.createOtherFolder !== undefined) createOtherEl.checked = s.createOtherFolder;
+      validatePath();
+    }
+
+    function saveSettings() {
+      window.sendToPlugin && window.sendToPlugin({
+        event: "setSettings",
+        payload: {
+          folderPath:        folderPathEl.value.trim(),
+          createOtherFolder: createOtherEl.checked
+        }
+      });
+    }
+
+    function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
+      const websocket = new WebSocket("ws://127.0.0.1:" + inPort);
+      const actionInfo = JSON.parse(inActionInfo);
+      loadSettings(actionInfo.payload?.settings ?? {});
+
+      websocket.onopen = () => {
+        websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: inPropertyInspectorUUID }));
+      };
+      websocket.onmessage = (evt) => {
+        const msg = JSON.parse(evt.data);
+        if (msg.event === "didReceiveSettings") loadSettings(msg.payload.settings ?? {});
+      };
+      window.sendToPlugin = (payload) => {
+        websocket.send(JSON.stringify({ event: "setSettings", context: inPropertyInspectorUUID, payload: payload.payload }));
+      };
+
+      folderPathEl.addEventListener("input", () => { validatePath(); saveSettings(); });
+      createOtherEl.addEventListener("change", saveSettings);
+    }
+  </script>
+</body>
+</html>

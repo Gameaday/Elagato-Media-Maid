@@ -1,0 +1,30 @@
+{
+  "name": "com.gameaday.mediamaid",
+  "version": "1.0.0",
+  "description": "MediaMaid – Media organizer and renamer for Jellyfin, Plex, and content curation",
+  "private": true,
+  "scripts": {
+    "build": "rollup -c --bundleConfigAsCjs",
+    "watch": "rollup -cw --bundleConfigAsCjs",
+    "lint": "eslint src __tests__ --ext .ts",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@elgato/streamdeck": "2.0.2"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.8",
+    "@rollup/plugin-node-resolve": "^15.2.3",
+    "@rollup/plugin-typescript": "^11.1.6",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.14.0",
+    "@typescript-eslint/eslint-plugin": "^7.15.0",
+    "@typescript-eslint/parser": "^7.15.0",
+    "eslint": "^8.57.0",
+    "jest": "^29.7.0",
+    "rollup": "^3.29.5",
+    "ts-jest": "^29.2.3",
+    "tslib": "^2.8.1",
+    "typescript": "^5.5.3"
+  }
+}

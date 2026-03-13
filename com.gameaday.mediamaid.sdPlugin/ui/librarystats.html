@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Library Stats Settings</title>
+  <link rel="stylesheet" href="mediamaid.css">
+</head>
+<body>
+  <div class="sdpi-wrapper">
+
+    <h1>Library Stats</h1>
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-label" for="libraryRoot">Library Root</label>
+      <input type="text" id="libraryRoot" placeholder="/path/to/media/library">
+      <div id="pathStatus"></div>
+    </div>
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-label" for="refreshInterval">Auto-refresh (seconds)</label>
+      <input type="number" id="refreshInterval" min="0" max="3600" step="30" placeholder="0">
+      <div class="sdpi-info">Set to 0 for manual refresh only. Minimum 30 s when enabled.</div>
+    </div>
+
+    <hr class="sdpi-divider">
+
+    <div class="sdpi-info">
+      Displays library statistics on the Stream Deck+ touchscreen.<br>
+      <strong>Dial:</strong> Rotate to cycle stats · Push to refresh · Touch for details
+    </div>
+
+  </div>
+
+  <script>
+    const libraryRootEl     = document.getElementById("libraryRoot");
+    const refreshIntervalEl = document.getElementById("refreshInterval");
+    const pathStatusEl      = document.getElementById("pathStatus");
+
+    function validatePath() {
+      const path = libraryRootEl.value.trim();
+      if (!path) { pathStatusEl.className = ""; pathStatusEl.textContent = ""; }
+      else if (!path.startsWith("/") && !path.match(/^[A-Za-z]:\\/)) {
+        pathStatusEl.className = "sdpi-warning";
+        pathStatusEl.textContent = "Path should be absolute.";
+      } else {
+        pathStatusEl.className = "sdpi-success";
+        pathStatusEl.textContent = "Ready.";
+      }
+    }
+
+    function loadSettings(s) {
+      libraryRootEl.value = s.libraryRoot || "";
+      refreshIntervalEl.value = s.refreshInterval || 0;
+      validatePath();
+    }
+
+    function saveSettings() {
+      const payload = {
+        libraryRoot: libraryRootEl.value.trim(),
+        refreshInterval: parseInt(refreshIntervalEl.value) || 0
+      };
+      $PI.websocket && $PI.websocket.send(JSON.stringify({ event: "setSettings", context: $PI.uuid, payload }));
+    }
+
+    const $PI = { websocket: null, uuid: "" };
+
+    function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
+      $PI.uuid = inPropertyInspectorUUID;
+      const actionInfo = JSON.parse(inActionInfo);
+      $PI.websocket = new WebSocket("ws://127.0.0.1:" + inPort);
+
+      $PI.websocket.onopen = () => {
+        $PI.websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: $PI.uuid }));
+        $PI.websocket.send(JSON.stringify({ event: "getSettings", context: $PI.uuid }));
+      };
+      $PI.websocket.onmessage = (evt) => {
+        const msg = JSON.parse(evt.data);
+        if (msg.event === "didReceiveSettings") loadSettings(msg.payload.settings);
+      };
+
+      loadSettings(actionInfo.payload?.settings ?? {});
+      libraryRootEl.addEventListener("input", () => { validatePath(); saveSettings(); });
+      refreshIntervalEl.addEventListener("change", saveSettings);
+    }
+  </script>
+</body>
+</html>

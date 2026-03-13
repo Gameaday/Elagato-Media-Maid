@@ -1,0 +1,7 @@
+node_modules/
+dist/
+com.gameaday.mediamaid.sdPlugin/bin/
+coverage/
+*.log
+.DS_Store
+Thumbs.db

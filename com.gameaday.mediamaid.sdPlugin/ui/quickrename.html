@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quick Rename – MediaMaid</title>
+  <link rel="stylesheet" href="mediamaid.css">
+</head>
+<body>
+  <div class="sdpi-wrapper">
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-label" for="folderPath">Target Folder</label>
+      <input type="text" id="folderPath" placeholder="/path/to/your/media/folder">
+      <div id="pathStatus"></div>
+    </div>
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-label" for="mediaType">Naming Standard</label>
+      <select id="mediaType">
+        <option value="jellyfin_tv">Jellyfin / Plex – TV Show</option>
+        <option value="jellyfin_movie">Jellyfin / Plex – Movie</option>
+        <option value="photography">Photography – Date + Location</option>
+        <option value="music">Music – Track# Artist Song</option>
+        <option value="books">Books / eBooks – Author Title</option>
+        <option value="generic_docs">Documents – Date Prefixed</option>
+      </select>
+    </div>
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-label">Format Preview</label>
+      <div class="preview-box" id="formatPreview">Show Name - S01E01 - Episode Title.mkv</div>
+    </div>
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-check">
+        <input type="checkbox" id="createFolderStructure">
+        Create folder structure
+      </label>
+      <div class="sdpi-info">Also moves files into organised subfolders (e.g., Season 01, Artist/Album).</div>
+    </div>
+
+    <hr class="sdpi-divider">
+
+    <div class="sdpi-info">
+      <strong>Short press</strong> – rename files<br>
+      <strong>Long press (&gt;0.5 s)</strong> – dry run (preview in log, no changes)<br>
+      <strong>Dial rotate</strong> – cycle naming pattern
+    </div>
+
+  </div>
+
+  <script>
+    const PREVIEWS = {
+      jellyfin_tv:    "Show Name - S01E02 - Episode Title.mkv",
+      jellyfin_movie: "Movie Title (2024).mkv",
+      photography:    "2024-06-15_Paris_001.jpg",
+      music:          "01 - Artist Name - Song Title.flac",
+      books:          "Author Name - Book Title.epub",
+      generic_docs:   "2024-06-15_Original Filename.pdf"
+    };
+
+    const HAS_FOLDER = {
+      jellyfin_tv: true, jellyfin_movie: true, photography: false,
+      music: true, books: true, generic_docs: false
+    };
+
+    const folderPathEl = document.getElementById("folderPath");
+    const mediaTypeEl  = document.getElementById("mediaType");
+    const createFSEl   = document.getElementById("createFolderStructure");
+    const previewEl    = document.getElementById("formatPreview");
+    const pathStatusEl = document.getElementById("pathStatus");
+
+    function updatePreview() {
+      const type = mediaTypeEl.value;
+      previewEl.textContent = PREVIEWS[type] || "";
+      createFSEl.disabled = !HAS_FOLDER[type];
+    }
+
+    function validatePath() {
+      const path = folderPathEl.value.trim();
+      if (!path) {
+        pathStatusEl.className = "";
+        pathStatusEl.textContent = "";
+      } else if (!path.startsWith("/") && !path.match(/^[A-Za-z]:\\/)) {
+        pathStatusEl.className = "sdpi-warning";
+        pathStatusEl.textContent = "Path should be absolute (e.g., /media/tv or C:\\Media\\TV).";
+      } else {
+        pathStatusEl.className = "sdpi-success";
+        pathStatusEl.textContent = "Path looks valid. Files will be renamed on button press.";
+      }
+    }
+
+    function loadSettings(settings) {
+      if (settings.folderPath !== undefined) folderPathEl.value = settings.folderPath;
+      if (settings.mediaType  !== undefined) mediaTypeEl.value  = settings.mediaType;
+      if (settings.createFolderStructure !== undefined) createFSEl.checked = settings.createFolderStructure;
+      updatePreview();
+      validatePath();
+    }
+
+    function saveSettings() {
+      window.sendToPlugin({
+        event: "setSettings",
+        payload: {
+          folderPath:            folderPathEl.value.trim(),
+          mediaType:             mediaTypeEl.value,
+          createFolderStructure: createFSEl.checked
+        }
+      });
+    }
+
+    function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
+      const websocket = new WebSocket("ws://127.0.0.1:" + inPort);
+      const actionInfo = JSON.parse(inActionInfo);
+      const settings = actionInfo.payload?.settings ?? {};
+      loadSettings(settings);
+
+      websocket.onopen = () => {
+        websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: inPropertyInspectorUUID }));
+      };
+
+      websocket.onmessage = (evt) => {
+        const msg = JSON.parse(evt.data);
+        if (msg.event === "didReceiveSettings") {
+          loadSettings(msg.payload.settings ?? {});
+        }
+      };
+
+      window.sendToPlugin = (payload) => {
+        websocket.send(JSON.stringify({
+          event:   "setSettings",
+          context: inPropertyInspectorUUID,
+          payload: payload.payload
+        }));
+      };
+
+      folderPathEl.addEventListener("input", () => { validatePath(); saveSettings(); });
+      mediaTypeEl.addEventListener("change", () => { updatePreview(); saveSettings(); });
+      createFSEl.addEventListener("change", saveSettings);
+    }
+
+    mediaTypeEl.addEventListener("change", updatePreview);
+    updatePreview();
+  </script>
+</body>
+</html>

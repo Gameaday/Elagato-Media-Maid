@@ -1,0 +1,165 @@
+{
+  "Author": "GameADay",
+  "Category": "MediaMaid",
+  "CategoryIcon": "imgs/plugin/category",
+  "CodePath": "bin/plugin.js",
+  "Description": "MediaMaid – One-touch media organizer and renamer for Jellyfin, Plex, and content curation. Rename TV shows, movies, music, and photos in seconds. Stream Deck+ encoder support for scrolling through patterns and adjusting confidence.",
+  "Icon": "imgs/plugin/icon",
+  "Name": "MediaMaid",
+  "Actions": [
+    {
+      "Icon": "imgs/actions/quickrename/icon",
+      "Name": "Quick Rename",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/rename-status.json",
+        "TriggerDescription": {
+          "Rotate": "Cycle pattern",
+          "Push": "Apply rename",
+          "Touch": "Dry-run preview",
+          "LongTouch": "Open folder"
+        }
+      },
+      "PropertyInspectorPath": "ui/quickrename.html",
+      "States": [
+        { "Image": "imgs/actions/quickrename/key", "Title": "Rename" },
+        { "Image": "imgs/actions/quickrename/key-active", "Title": "Working…" }
+      ],
+      "DisableAutomaticStates": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Rename files in the configured folder to a chosen media standard (Jellyfin, Photography, Music, etc.). On Stream Deck+, rotate the dial to cycle naming patterns.",
+      "UUID": "com.gameaday.mediamaid.quickrename"
+    },
+    {
+      "Icon": "imgs/actions/smartfix/icon",
+      "Name": "Smart Fix",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/smartfix-status.json",
+        "TriggerDescription": {
+          "Rotate": "Adjust confidence",
+          "Push": "Auto-detect & fix",
+          "Touch": "Dry-run preview",
+          "LongTouch": "Rescan folder"
+        }
+      },
+      "PropertyInspectorPath": "ui/smartfix.html",
+      "States": [
+        { "Image": "imgs/actions/smartfix/key", "Title": "Smart Fix" },
+        { "Image": "imgs/actions/smartfix/key-active", "Title": "Scanning…" }
+      ],
+      "DisableAutomaticStates": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Automatically detect the media type in the target folder and apply the best naming convention. On Stream Deck+, rotate to adjust confidence threshold.",
+      "UUID": "com.gameaday.mediamaid.smartfix"
+    },
+    {
+      "Icon": "imgs/actions/nukedownloads/icon",
+      "Name": "Nuke Downloads",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/nuke-status.json",
+        "TriggerDescription": {
+          "Rotate": "Browse categories",
+          "Push": "Sort files",
+          "Touch": "Dry-run preview"
+        }
+      },
+      "PropertyInspectorPath": "ui/nukedownloads.html",
+      "States": [
+        { "Image": "imgs/actions/nukedownloads/key", "Title": "Nuke\nDownloads" },
+        { "Image": "imgs/actions/nukedownloads/key-active", "Title": "Sorting…" }
+      ],
+      "DisableAutomaticStates": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Sort files in the target folder into subfolders by type: Images, Videos, Audio, Documents, Installers, and Other.",
+      "UUID": "com.gameaday.mediamaid.nukedownloads"
+    },
+    {
+      "Icon": "imgs/actions/undo/icon",
+      "Name": "Undo Last Action",
+      "Controllers": ["Keypad"],
+      "PropertyInspectorPath": "ui/undo.html",
+      "States": [
+        { "Image": "imgs/actions/undo/key", "Title": "Undo" }
+      ],
+      "SupportedInMultiActions": true,
+      "Tooltip": "Revert the most recent MediaMaid rename or organization operation.",
+      "UUID": "com.gameaday.mediamaid.undo"
+    },
+    {
+      "Icon": "imgs/actions/deepscan/icon",
+      "Name": "Deep Scan",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/deepscan-status.json",
+        "TriggerDescription": {
+          "Rotate": "Browse results",
+          "Push": "Start scan",
+          "Touch": "View report"
+        }
+      },
+      "PropertyInspectorPath": "ui/deepscan.html",
+      "States": [
+        { "Image": "imgs/actions/deepscan/key", "Title": "Deep Scan" },
+        { "Image": "imgs/actions/deepscan/key-active", "Title": "Scanning…" }
+      ],
+      "DisableAutomaticStates": true,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Recursively scan a library root for naming inconsistencies across all subfolders. Reports misnamed files and auto-fixes them.",
+      "UUID": "com.gameaday.mediamaid.deepscan"
+    },
+    {
+      "Icon": "imgs/actions/nfoeditor/icon",
+      "Name": "NFO Editor ★",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/nfo-status.json",
+        "TriggerDescription": {
+          "Rotate": "Browse fields",
+          "Push": "Save NFO",
+          "Touch": "Edit field"
+        }
+      },
+      "PropertyInspectorPath": "ui/nfoeditor.html",
+      "States": [
+        { "Image": "imgs/actions/nfoeditor/key", "Title": "NFO Edit" },
+        { "Image": "imgs/actions/nfoeditor/key-active", "Title": "Saving…" }
+      ],
+      "DisableAutomaticStates": true,
+      "SupportedInMultiActions": false,
+      "Tooltip": "Create, update, and edit NFO metadata files for Jellyfin/Kodi media libraries. Premium feature.",
+      "UUID": "com.gameaday.mediamaid.nfoeditor"
+    },
+    {
+      "Icon": "imgs/actions/librarystats/icon",
+      "Name": "Library Stats",
+      "Controllers": ["Encoder"],
+      "Encoder": {
+        "layout": "layouts/library-stats.json",
+        "TriggerDescription": {
+          "Rotate": "Cycle stats",
+          "Push": "Refresh",
+          "Touch": "Show details"
+        }
+      },
+      "PropertyInspectorPath": "ui/librarystats.html",
+      "States": [
+        { "Image": "imgs/actions/librarystats/key", "Title": "Stats" }
+      ],
+      "SupportedInMultiActions": false,
+      "Tooltip": "Stream Deck+ only. Shows real-time library statistics on the touchscreen: file counts by type, total size, naming health score.",
+      "UUID": "com.gameaday.mediamaid.librarystats"
+    }
+  ],
+  "UUID": "com.gameaday.mediamaid",
+  "Version": "1.0.0.0",
+  "SDKVersion": 2,
+  "Software": { "MinimumVersion": "6.8" },
+  "OS": [
+    { "Platform": "mac", "MinimumVersion": "10.15" },
+    { "Platform": "windows", "MinimumVersion": "10" }
+  ],
+  "Nodejs": { "Version": "20", "Debug": "enabled" },
+  "URL": "https://github.com/Gameaday/Elagato-Media-Maid"
+}
