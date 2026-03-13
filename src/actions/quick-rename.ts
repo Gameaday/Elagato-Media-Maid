@@ -11,12 +11,12 @@
 import streamDeck, {
   action,
   SingletonAction,
-  type JsonValue,
   type KeyDownEvent,
   type KeyUpEvent,
   type WillAppearEvent,
   type DidReceiveSettingsEvent
 } from "@elgato/streamdeck";
+import type { JsonValue } from "@elgato/utils";
 
 import { MediaType, getPattern } from "../lib/patterns.js";
 import { renameFolder, organizeWithFolderStructure } from "../lib/renamer.js";

@@ -11,7 +11,7 @@ import { SmartFixAction } from "./actions/smart-fix.js";
 import { UndoAction } from "./actions/undo-action.js";
 import { NukeDownloadsAction } from "./actions/nuke-downloads.js";
 
-streamDeck.logger.setLevel(2); // LogLevel.INFO
+streamDeck.logger.setLevel("info");
 
 streamDeck.actions.registerAction(new QuickRenameAction());
 streamDeck.actions.registerAction(new SmartFixAction());

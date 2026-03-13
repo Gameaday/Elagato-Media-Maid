@@ -1,6 +1,6 @@
 {
   "name": "com.gameaday.mediamaid",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "MediaMaid – Media organizer and renamer for Jellyfin, Plex, and content curation",
   "private": true,
   "scripts": {
@@ -10,7 +10,7 @@
     "test": "jest"
   },
   "dependencies": {
-    "@elgato/streamdeck": "1.4.1"
+    "@elgato/streamdeck": "2.0.2"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^25.0.8",
