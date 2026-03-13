@@ -11,7 +11,7 @@ export default {
     sourcemap: true,
     exports: "auto"
   },
-  external: ["fs", "fs/promises", "path", "os", "child_process", "crypto", "xml2js"],
+  external: ["fs", "fs/promises", "path", "os", "child_process", "crypto"],
   plugins: [
     nodeResolve({ browser: false, preferBuiltins: true }),
     typescript({ tsconfig: "./tsconfig.json" }),
