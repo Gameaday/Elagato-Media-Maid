@@ -45,6 +45,11 @@ afterAll(() => {
 
 describe("extension sets", () => {
   it("have no overlaps between primary content categories", () => {
+    // Primary content categories should be mutually exclusive.
+    // INSTALLER_EXTS, ARCHIVE_EXTS, CODE_EXTS, NFO_EXTS, SUBTITLE_EXTS are
+    // excluded because they are ancillary categories that intentionally
+    // overlap with some primary types (e.g. .pdf in both EBOOK and DOCUMENT
+    // is handled by organizer sort priority, not set disjointness).
     const sets = [VIDEO_EXTS, PHOTO_EXTS, AUDIO_EXTS, EBOOK_EXTS, DOCUMENT_EXTS];
     for (let i = 0; i < sets.length; i++) {
       for (let j = i + 1; j < sets.length; j++) {

@@ -91,12 +91,23 @@ export const SUBTITLE_EXTS = new Set([
 
 // ── Naming pattern extension lists (for renamer / patterns.ts) ─────
 
-/** Extensions recognised as TV/movie video files */
+/** Regex to strip release group tags from parsed episode titles */
+export const RELEASE_TAG_RE = /\b(720p|1080p|2160p|4K|BluRay|WEB-?DL|HDTV|x264|x265|HEVC|AAC|DTS)\b.*/i;
+
+/**
+ * Extensions recognised as TV/movie video files.
+ * Excludes legacy/specialised formats (.flv, .mpg, .mpeg, .3gp, .ogv, .vob)
+ * that are rarely found in modern TV/movie libraries.
+ */
 export const TV_VIDEO_EXTENSIONS = Array.from(VIDEO_EXTS).filter(
   e => ![".flv", ".mpg", ".mpeg", ".3gp", ".ogv", ".vob"].includes(e)
 );
 
-/** Extensions recognised for photography patterns */
+/**
+ * Extensions recognised for photography patterns.
+ * Excludes web/vector graphics (.gif, .bmp, .svg) and formats (.avif)
+ * not typically produced by cameras.
+ */
 export const PHOTO_EXTENSIONS = Array.from(PHOTO_EXTS).filter(
   e => ![".gif", ".bmp", ".svg", ".avif"].includes(e)
 );

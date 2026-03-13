@@ -12,7 +12,7 @@ import type { NamingPattern, FileMetadata } from "./patterns.js";
 import { findAndParseNfo } from "./nfo-parser.js";
 import { logOperation } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
-import { validateFolderPath } from "./config.js";
+import { validateFolderPath, RELEASE_TAG_RE } from "./config.js";
 
 export interface RenameOperation {
   /** Original full path */
@@ -45,7 +45,11 @@ export interface RenameResult {
 export function parseTvPattern(baseName: string): Partial<FileMetadata> {
   const meta: Partial<FileMetadata> = {};
 
-  // Standard SxxExx pattern (with optional multi-episode)
+  // Standard SxxExx pattern (with optional multi-episode E##)
+  // Group 1: show title (before separator + SxxExx)
+  // Group 2: season number  (1-2 digits)
+  // Group 3: first episode  (1-3 digits)
+  // Group 4: optional episode title (after separator, before release tags)
   const seMatch = /^(.*?)[.\s_-]+[Ss](\d{1,2})[Ee](\d{1,3})(?:[Ee]\d{1,3})?(?:[.\s_-]+(.+))?$/.exec(baseName);
   if (seMatch) {
     meta.title = seMatch[1].replace(/[._]/g, " ").trim();
@@ -54,7 +58,7 @@ export function parseTvPattern(baseName: string): Partial<FileMetadata> {
     if (seMatch[4]) {
       meta.episodeTitle = seMatch[4]
         .replace(/[._]/g, " ")
-        .replace(/\b(720p|1080p|2160p|4K|BluRay|WEB-?DL|HDTV|x264|x265|HEVC|AAC|DTS)\b.*/i, "")
+        .replace(RELEASE_TAG_RE, "")
         .trim();
     }
     return meta;
@@ -69,7 +73,7 @@ export function parseTvPattern(baseName: string): Partial<FileMetadata> {
     if (nxMatch[4]) {
       meta.episodeTitle = nxMatch[4]
         .replace(/[._]/g, " ")
-        .replace(/\b(720p|1080p|2160p|4K|BluRay|WEB-?DL|HDTV|x264|x265|HEVC|AAC|DTS)\b.*/i, "")
+        .replace(RELEASE_TAG_RE, "")
         .trim();
     }
     return meta;
