@@ -155,7 +155,7 @@
   "UUID": "com.gameaday.mediamaid",
   "Version": "1.0.0.0",
   "SDKVersion": 2,
-  "Software": { "MinimumVersion": "6.7" },
+  "Software": { "MinimumVersion": "6.8" },
   "OS": [
     { "Platform": "mac", "MinimumVersion": "10.15" },
     { "Platform": "windows", "MinimumVersion": "10" }

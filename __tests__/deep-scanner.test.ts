@@ -3,7 +3,7 @@
  */
 
 import { mkdirSync, writeFileSync, rmSync } from "fs";
-import { join } from "path";
+import { join, dirname } from "path";
 import { deepScan } from "../src/lib/deep-scanner";
 
 const TEST_ROOT = join(__dirname, ".tmp-deepscan");
@@ -11,7 +11,7 @@ const TEST_ROOT = join(__dirname, ".tmp-deepscan");
 function createTestFiles(structure: Record<string, string>) {
   for (const [relPath, content] of Object.entries(structure)) {
     const fullPath = join(TEST_ROOT, relPath);
-    const dir = fullPath.substring(0, fullPath.lastIndexOf("/"));
+    const dir = dirname(fullPath);
     mkdirSync(dir, { recursive: true });
     writeFileSync(fullPath, content);
   }

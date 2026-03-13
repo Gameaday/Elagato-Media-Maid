@@ -7,7 +7,7 @@
  */
 
 import { readdirSync, statSync } from "fs";
-import { join, extname, basename } from "path";
+import { join, extname, basename, dirname } from "path";
 import { detectMediaType } from "./detector.js";
 import { getPattern } from "./patterns.js";
 import type { NamingPattern, FileMetadata } from "./patterns.js";
@@ -132,8 +132,7 @@ export async function deepScan(
   result.filesExamined = allFiles.length;
 
   // Count unique directories
-  const dirs = new Set(allFiles.map(f => f.substring(0, f.lastIndexOf("/") >= 0 ? f.lastIndexOf("/") : f.lastIndexOf("\\"))));
-  result.directoriesScanned = dirs.size;
+  const dirs = new Set(allFiles.map(f => dirname(f)));  result.directoriesScanned = dirs.size;
 
   if (allFiles.length === 0) {
     result.healthScore = 100;
@@ -177,7 +176,7 @@ export async function deepScan(
         result.fixed++;
       } else {
         try {
-          const dir = issue.filePath.substring(0, issue.filePath.lastIndexOf("/") >= 0 ? issue.filePath.lastIndexOf("/") : issue.filePath.lastIndexOf("\\"));
+          const dir = dirname(issue.filePath);
           const newPath = join(dir, issue.suggestedName);
           await mkdir(dir, { recursive: true });
           await rename(issue.filePath, newPath);
