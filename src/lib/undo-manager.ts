@@ -10,7 +10,8 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import { rename, rmdir } from "fs/promises";
+import { rename, rm } from "fs/promises";
+import { MAX_UNDO_SNAPSHOTS } from "./config.js";
 
 export interface FileOperation {
   /** Operation type */
@@ -31,7 +32,6 @@ export interface UndoSnapshot {
 }
 
 const UNDO_FILE_PATH = join(homedir(), ".mediamaid", "undo-stack.json");
-const MAX_UNDO_SNAPSHOTS = 10;
 
 function ensureDir(): void {
   const dir = join(homedir(), ".mediamaid");
@@ -97,9 +97,9 @@ export async function applyUndo(snapshot: UndoSnapshot): Promise<string[]> {
   for (const op of ops) {
     try {
       if (op.type === "mkdir") {
-        // Try to remove the directory if it's empty
+        // Try to remove the directory (only removes empty dirs for safety)
         try {
-          await rmdir(op.to);
+          await rm(op.to, { recursive: false });
         } catch {
           // Directory not empty or doesn't exist – skip silently
         }

@@ -4,12 +4,15 @@
  * Scans a media library and produces aggregate statistics including
  * file counts by type, total size, and naming health scores.
  * Designed for display on the Stream Deck+ touchscreen.
+ *
+ * Uses the centralized extension registry from config.ts.
  */
 
 import { readdirSync, statSync } from "fs";
 import { join, extname } from "path";
 import { detectMediaType } from "./detector.js";
 import type { MediaType } from "./patterns.js";
+import { CATEGORY_MAP, DEFAULT_MAX_DEPTH, validateFolderPath } from "./config.js";
 
 export interface LibraryStat {
   /** Stat label for display */
@@ -35,14 +38,7 @@ export interface LibraryStats {
   displayStats: LibraryStat[];
 }
 
-const CATEGORY_MAP: Record<string, Set<string>> = {
-  "Video": new Set([".mkv", ".mp4", ".avi", ".m4v", ".ts", ".mov", ".wmv", ".webm", ".flv", ".mpg", ".mpeg"]),
-  "Audio": new Set([".flac", ".mp3", ".aac", ".ogg", ".opus", ".wav", ".m4a", ".wma", ".alac"]),
-  "Photo": new Set([".jpg", ".jpeg", ".png", ".heic", ".raw", ".arw", ".cr2", ".nef", ".tiff", ".tif", ".webp", ".gif", ".bmp", ".svg"]),
-  "Book": new Set([".epub", ".mobi", ".azw", ".azw3", ".cbz", ".cbr"]),
-  "Doc": new Set([".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".md", ".csv", ".rtf"]),
-  "NFO": new Set([".nfo"])
-};
+// CATEGORY_MAP imported from config.ts
 
 /**
  * Format bytes into a human-readable string.
@@ -57,7 +53,7 @@ function formatBytes(bytes: number): string {
 /**
  * Recursively gather file stats from a directory.
  */
-function gatherStats(dir: string, maxDepth = 5, depth = 0): { files: number; bytes: number; categories: Record<string, number> } {
+function gatherStats(dir: string, maxDepth = DEFAULT_MAX_DEPTH, depth = 0): { files: number; bytes: number; categories: Record<string, number> } {
   const result = { files: 0, bytes: 0, categories: {} as Record<string, number> };
 
   if (depth > maxDepth) return result;
@@ -109,6 +105,19 @@ function gatherStats(dir: string, maxDepth = 5, depth = 0): { files: number; byt
  * Calculate library statistics for a given directory.
  */
 export function calculateLibraryStats(libraryRoot: string): LibraryStats {
+  const pathCheck = validateFolderPath(libraryRoot);
+  if (!pathCheck.valid) {
+    return {
+      totalFiles: 0,
+      totalSizeBytes: 0,
+      totalSizeFormatted: "0 B",
+      categoryCounts: {},
+      detectedType: "unknown" as MediaType,
+      confidence: 0,
+      displayStats: [{ label: "Error", value: pathCheck.reason ?? "Invalid path" }]
+    };
+  }
+
   const raw = gatherStats(libraryRoot);
   const detection = detectMediaType(libraryRoot);
 

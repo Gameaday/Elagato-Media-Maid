@@ -4,90 +4,89 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Nuke Downloads – MediaMaid</title>
+  <link rel="stylesheet" href="mediamaid.css">
   <style>
-    :root {
-      --bg: #1e1e1e; --surface: #2a2a2a; --border: #3a3a3a;
-      --text: #e0e0e0; --text-muted: #888; --accent: #4a9eff;
-      font-size: 13px;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      background: var(--bg); color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      padding: 12px;
-    }
-    .field { margin-bottom: 12px; }
-    label {
-      display: block; color: var(--text-muted); font-size: 11px;
-      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;
-    }
-    input[type="text"] {
-      width: 100%; background: var(--surface); border: 1px solid var(--border);
-      border-radius: 4px; color: var(--text); padding: 6px 8px;
-      font-size: 13px; outline: none;
-    }
-    input[type="text"]:focus { border-color: var(--accent); }
-    .checkbox-row { display: flex; align-items: center; gap: 8px; }
-    input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
-    .help { color: var(--text-muted); font-size: 11px; margin-top: 4px; line-height: 1.4; }
-    .divider { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
     .categories {
-      background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
-      padding: 8px; font-size: 11px; line-height: 1.8; color: var(--text-muted);
+      background: #1e1e1e;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px;
+      font-size: 12px;
+      line-height: 1.8;
+      color: var(--text-dim);
     }
-    .categories span { color: var(--accent); }
+    .categories strong { color: var(--accent); }
   </style>
 </head>
 <body>
+  <div class="sdpi-wrapper">
 
-  <div class="field">
-    <label for="folderPath">Target Folder</label>
-    <input type="text" id="folderPath" placeholder="/Users/you/Downloads">
-    <p class="help">Files in this folder will be sorted into categorized subfolders.</p>
-  </div>
-
-  <div class="field">
-    <label>Categories Created</label>
-    <div class="categories">
-      <span>Images</span> · jpg, jpeg, png, gif, heic, raw, webp…<br>
-      <span>Videos</span> · mp4, mkv, avi, mov, wmv, webm…<br>
-      <span>Audio</span> · mp3, flac, aac, ogg, wav, m4a…<br>
-      <span>Documents</span> · pdf, doc, docx, xls, txt, md…<br>
-      <span>eBooks</span> · epub, mobi, azw, cbz, cbr…<br>
-      <span>Installers</span> · exe, msi, dmg, pkg, iso…<br>
-      <span>Archives</span> · zip, rar, 7z, tar, gz…<br>
-      <span>Code</span> · js, ts, py, java, go, rs…<br>
-      <span>Other</span> · everything else (if enabled below)
+    <div class="sdpi-item">
+      <label class="sdpi-item-label" for="folderPath">Target Folder</label>
+      <input type="text" id="folderPath" placeholder="/Users/you/Downloads">
+      <div id="pathStatus"></div>
     </div>
-  </div>
 
-  <div class="field">
-    <div class="checkbox-row">
-      <input type="checkbox" id="createOtherFolder" checked>
-      <label for="createOtherFolder" style="text-transform:none;font-size:13px;">Create "Other" folder for unrecognised files</label>
+    <div class="sdpi-item">
+      <label class="sdpi-item-label">Categories Created</label>
+      <div class="categories">
+        <strong>Images</strong> · jpg, png, gif, heic, raw, webp…<br>
+        <strong>Videos</strong> · mp4, mkv, avi, mov, wmv, webm…<br>
+        <strong>Audio</strong> · mp3, flac, aac, ogg, wav, m4a…<br>
+        <strong>Documents</strong> · pdf, doc, docx, xls, txt, md…<br>
+        <strong>eBooks</strong> · epub, mobi, azw, cbz, cbr…<br>
+        <strong>Installers</strong> · exe, msi, dmg, pkg, iso…<br>
+        <strong>Archives</strong> · zip, rar, 7z, tar, gz…<br>
+        <strong>Code</strong> · js, ts, py, java, go, rs…<br>
+        <strong>Other</strong> · everything else
+      </div>
     </div>
-  </div>
 
-  <hr class="divider">
-  <p class="help">
-    <strong>Short press</strong> – sort files into subfolders<br>
-    <strong>Long press (&gt;0.5 s)</strong> – dry run (preview in log, no changes)
-  </p>
+    <div class="sdpi-item">
+      <label class="sdpi-item-check">
+        <input type="checkbox" id="createOtherFolder" checked>
+        Create "Other" folder for unrecognised files
+      </label>
+    </div>
+
+    <hr class="sdpi-divider">
+
+    <div class="sdpi-info">
+      <strong>Short press</strong> – sort files into subfolders<br>
+      <strong>Long press (&gt;0.5 s)</strong> – dry run (preview in log)<br>
+      <strong>Dial rotate</strong> – browse categories
+    </div>
+
+  </div>
 
   <script>
-    const folderPathEl    = document.getElementById("folderPath");
-    const createOtherEl   = document.getElementById("createOtherFolder");
+    const folderPathEl  = document.getElementById("folderPath");
+    const createOtherEl = document.getElementById("createOtherFolder");
+    const pathStatusEl  = document.getElementById("pathStatus");
+
+    function validatePath() {
+      const path = folderPathEl.value.trim();
+      if (!path) { pathStatusEl.className = ""; pathStatusEl.textContent = ""; }
+      else if (!path.startsWith("/") && !path.match(/^[A-Za-z]:\\/)) {
+        pathStatusEl.className = "sdpi-warning";
+        pathStatusEl.textContent = "Path should be absolute.";
+      } else {
+        pathStatusEl.className = "sdpi-success";
+        pathStatusEl.textContent = "Ready.";
+      }
+    }
 
     function loadSettings(s) {
-      if (s.folderPath        !== undefined) folderPathEl.value  = s.folderPath;
+      if (s.folderPath !== undefined) folderPathEl.value = s.folderPath;
       if (s.createOtherFolder !== undefined) createOtherEl.checked = s.createOtherFolder;
+      validatePath();
     }
 
     function saveSettings() {
       window.sendToPlugin && window.sendToPlugin({
         event: "setSettings",
         payload: {
-          folderPath:       folderPathEl.value.trim(),
+          folderPath:        folderPathEl.value.trim(),
           createOtherFolder: createOtherEl.checked
         }
       });
@@ -109,7 +108,7 @@
         websocket.send(JSON.stringify({ event: "setSettings", context: inPropertyInspectorUUID, payload: payload.payload }));
       };
 
-      folderPathEl.addEventListener("change", saveSettings);
+      folderPathEl.addEventListener("input", () => { validatePath(); saveSettings(); });
       createOtherEl.addEventListener("change", saveSettings);
     }
   </script>

@@ -8,6 +8,16 @@
 import { readdirSync, statSync } from "fs";
 import { extname, join } from "path";
 import { MediaType } from "./patterns.js";
+import {
+  VIDEO_EXTS,
+  PHOTO_EXTS,
+  AUDIO_EXTS,
+  EBOOK_EXTS,
+  DOCUMENT_EXTS,
+  TV_EPISODE_RE,
+  DETECTION_MAX_DEPTH,
+  validateFolderPath
+} from "./config.js";
 
 export interface DetectionResult {
   mediaType: MediaType;
@@ -19,20 +29,12 @@ export interface DetectionResult {
   extensionCounts: Record<string, number>;
 }
 
-// Extension sets for each media type
-const TV_VIDEO_EXTS = new Set([".mkv", ".mp4", ".avi", ".m4v", ".ts", ".mov", ".wmv", ".webm"]);
-const PHOTO_EXTS = new Set([".jpg", ".jpeg", ".png", ".heic", ".raw", ".arw", ".cr2", ".nef", ".tiff", ".tif", ".webp"]);
-const MUSIC_EXTS = new Set([".flac", ".mp3", ".aac", ".ogg", ".opus", ".wav", ".m4a", ".wma", ".alac"]);
-const BOOK_EXTS = new Set([".epub", ".mobi", ".azw", ".azw3", ".cbz", ".cbr"]);
-const DOC_EXTS = new Set([".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".md", ".csv"]);
-
-/** Regex patterns that suggest TV episode filenames */
-const TV_EPISODE_RE = /[Ss]\d{1,2}[Ee]\d{1,2}|[Ss]eason\s*\d|[Ee]pisode\s*\d|\b\d{1,2}x\d{2}\b/;
+// Extension sets are imported from config.ts (VIDEO_EXTS, PHOTO_EXTS, etc.)
 
 /**
  * Recursively collect file extensions from a directory (up to maxDepth levels deep).
  */
-function collectExtensions(dir: string, depth = 0, maxDepth = 1): Record<string, number> {
+function collectExtensions(dir: string, depth = 0, maxDepth = DETECTION_MAX_DEPTH): Record<string, number> {
   const counts: Record<string, number> = {};
   let entries: string[];
   try {
@@ -108,6 +110,16 @@ function hasNfoFiles(dir: string): boolean {
  * Detect the dominant media type in the given directory.
  */
 export function detectMediaType(folderPath: string): DetectionResult {
+  const pathCheck = validateFolderPath(folderPath);
+  if (!pathCheck.valid) {
+    return {
+      mediaType: MediaType.UNKNOWN,
+      confidence: 0,
+      reason: pathCheck.reason ?? "Invalid path.",
+      extensionCounts: {}
+    };
+  }
+
   const extCounts = collectExtensions(folderPath);
   const totalFiles = Object.values(extCounts).reduce((a, b) => a + b, 0);
 
@@ -120,11 +132,11 @@ export function detectMediaType(folderPath: string): DetectionResult {
     };
   }
 
-  const videoCount = countMatching(extCounts, TV_VIDEO_EXTS);
+  const videoCount = countMatching(extCounts, VIDEO_EXTS);
   const photoCount = countMatching(extCounts, PHOTO_EXTS);
-  const musicCount = countMatching(extCounts, MUSIC_EXTS);
-  const bookCount = countMatching(extCounts, BOOK_EXTS);
-  const docCount = countMatching(extCounts, DOC_EXTS);
+  const musicCount = countMatching(extCounts, AUDIO_EXTS);
+  const bookCount = countMatching(extCounts, EBOOK_EXTS);
+  const docCount = countMatching(extCounts, DOCUMENT_EXTS);
   const tvPatternCount = countTvPatternMatches(folderPath);
   const nfoPresent = hasNfoFiles(folderPath);
 

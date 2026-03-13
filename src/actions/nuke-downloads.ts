@@ -21,6 +21,7 @@ import streamDeck, {
   type KeyDownEvent,
   type KeyUpEvent,
   type WillAppearEvent,
+  type WillDisappearEvent,
   type DidReceiveSettingsEvent,
   type DialRotateEvent,
   type DialDownEvent,
@@ -30,6 +31,7 @@ import type { JsonValue } from "@elgato/utils";
 
 import { sortFolder, DEFAULT_SORT_RULES } from "../lib/organizer.js";
 import { getLogFilePath } from "../lib/logger.js";
+import { LONG_PRESS_MS } from "../lib/config.js";
 
 export interface NukeDownloadsSettings {
   [key: string]: JsonValue;
@@ -38,8 +40,6 @@ export interface NukeDownloadsSettings {
   /** Whether to create an "Other" folder for unrecognized file types */
   createOtherFolder: boolean;
 }
-
-const LONG_PRESS_MS = 500;
 
 /** Category names from sort rules for dial browsing */
 const CATEGORIES = DEFAULT_SORT_RULES.map(r => r.folder).concat("Other");
@@ -125,6 +125,13 @@ export class NukeDownloadsAction extends SingletonAction<NukeDownloadsSettings> 
     if (ev.action.isKey() || ev.action.isDial()) {
       await ev.action.setTitle("Nuke\nDownloads");
     }
+  }
+
+  override async onWillDisappear(ev: WillDisappearEvent<NukeDownloadsSettings>): Promise<void> {
+    const timer = this.pressTimers.get(ev.action.id);
+    if (timer !== undefined) clearTimeout(timer);
+    this.pressTimers.delete(ev.action.id);
+    this.categoryIndex.delete(ev.action.id);
   }
 
   // ── Helpers ──────────────────────────────────────────────────────

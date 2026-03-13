@@ -164,3 +164,82 @@ describe("renameFolder – Jellyfin Movie (live)", () => {
     expect(files.some(f => f.includes("(2010)"))).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// parseTvPattern – extended edge cases
+// ---------------------------------------------------------------------------
+describe("parseTvPattern – edge cases", () => {
+  it("strips release group tags from episode title", () => {
+    const meta = parseTvPattern("Show.S01E03.Episode Title.720p.BluRay.x264");
+    expect(meta.episodeTitle).toBe("Episode Title");
+  });
+
+  it("handles multi-episode SxxExxExx", () => {
+    const meta = parseTvPattern("Show.S02E05E06.Part One");
+    expect(meta.season).toBe(2);
+    expect(meta.episode).toBe(5);
+    expect(meta.episodeTitle).toBe("Part One");
+  });
+
+  it("handles three-digit episode numbers", () => {
+    const meta = parseTvPattern("Anime.S01E100.Big Episode");
+    expect(meta.season).toBe(1);
+    expect(meta.episode).toBe(100);
+  });
+
+  it("handles NxNNN three-digit episode", () => {
+    const meta = parseTvPattern("Anime 1x100 Big Episode");
+    expect(meta.season).toBe(1);
+    expect(meta.episode).toBe(100);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseMusicPattern
+// ---------------------------------------------------------------------------
+import { parseMusicPattern } from "../src/lib/renamer";
+
+describe("parseMusicPattern", () => {
+  it("parses track# - artist - song", () => {
+    const meta = parseMusicPattern("01 - Pink Floyd - Comfortably Numb");
+    expect(meta.trackNumber).toBe(1);
+    expect(meta.artist).toBe("Pink Floyd");
+    expect(meta.songTitle).toBe("Comfortably Numb");
+  });
+
+  it("parses dot-separated track# format", () => {
+    const meta = parseMusicPattern("03. Artist Name - Song Title");
+    expect(meta.trackNumber).toBe(3);
+    expect(meta.artist).toBe("Artist Name");
+    expect(meta.songTitle).toBe("Song Title");
+  });
+
+  it("parses artist - song without track number", () => {
+    const meta = parseMusicPattern("Led Zeppelin - Stairway to Heaven");
+    expect(meta.artist).toBe("Led Zeppelin");
+    expect(meta.songTitle).toBe("Stairway to Heaven");
+    expect(meta.trackNumber).toBeUndefined();
+  });
+
+  it("returns empty for unparseable filename", () => {
+    const meta = parseMusicPattern("random noise here");
+    expect(meta.artist).toBeUndefined();
+    expect(meta.songTitle).toBeUndefined();
+    expect(meta.trackNumber).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renameFolder – path validation
+// ---------------------------------------------------------------------------
+describe("renameFolder – path validation", () => {
+  it("returns error for empty path", async () => {
+    const result = await renameFolder("", jellyfinTvPattern, true);
+    expect(Object.keys(result.errors).length).toBeGreaterThan(0);
+  });
+
+  it("returns error for non-existent path", async () => {
+    const result = await renameFolder("/nonexistent/path/xyz", jellyfinTvPattern, true);
+    expect(Object.keys(result.errors).length).toBeGreaterThan(0);
+  });
+});

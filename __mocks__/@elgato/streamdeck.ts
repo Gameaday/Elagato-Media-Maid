@@ -16,6 +16,7 @@ export class SingletonAction<TSettings = Record<string, unknown>> {
   async onKeyDown(_ev: any): Promise<void> { /* noop */ }
   async onKeyUp(_ev: any): Promise<void> { /* noop */ }
   async onWillAppear(_ev: any): Promise<void> { /* noop */ }
+  async onWillDisappear(_ev: any): Promise<void> { /* noop */ }
   async onDidReceiveSettings(_ev: any): Promise<void> { /* noop */ }
   async onDialRotate(_ev: any): Promise<void> { /* noop */ }
   async onDialDown(_ev: any): Promise<void> { /* noop */ }

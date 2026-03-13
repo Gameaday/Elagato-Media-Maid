@@ -22,6 +22,7 @@ import streamDeck, {
   type KeyDownEvent,
   type KeyUpEvent,
   type WillAppearEvent,
+  type WillDisappearEvent,
   type DidReceiveSettingsEvent,
   type DialRotateEvent,
   type DialDownEvent,
@@ -38,6 +39,7 @@ import {
   type NfoField
 } from "../lib/nfo-writer.js";
 import { existsSync } from "fs";
+import { LONG_PRESS_MS } from "../lib/config.js";
 
 export interface NfoEditorSettings {
   [key: string]: JsonValue;
@@ -48,8 +50,6 @@ export interface NfoEditorSettings {
   /** Premium license key (empty = trial mode) */
   licenseKey: string;
 }
-
-const LONG_PRESS_MS = 500;
 
 @action({ UUID: "com.gameaday.mediamaid.nfoeditor" })
 export class NfoEditorAction extends SingletonAction<NfoEditorSettings> {
@@ -168,6 +168,15 @@ export class NfoEditorAction extends SingletonAction<NfoEditorSettings> {
       await ev.action.setTitle("NFO\nEdit ★");
     }
     await this.loadNfoData(ev.action.id, ev.payload.settings);
+  }
+
+  override async onWillDisappear(ev: WillDisappearEvent<NfoEditorSettings>): Promise<void> {
+    const timer = this.pressTimers.get(ev.action.id);
+    if (timer !== undefined) clearTimeout(timer);
+    this.pressTimers.delete(ev.action.id);
+    this.currentFields.delete(ev.action.id);
+    this.fieldIndex.delete(ev.action.id);
+    this.currentNfoType.delete(ev.action.id);
   }
 
   // ── Helpers ──────────────────────────────────────────────────────

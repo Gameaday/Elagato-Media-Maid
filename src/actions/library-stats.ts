@@ -16,6 +16,7 @@ import streamDeck, {
   SingletonAction,
   type Action,
   type WillAppearEvent,
+  type WillDisappearEvent,
   type DidReceiveSettingsEvent,
   type DialRotateEvent,
   type DialDownEvent,
@@ -24,6 +25,7 @@ import streamDeck, {
 import type { JsonValue } from "@elgato/utils";
 
 import { calculateLibraryStats, type LibraryStats } from "../lib/library-stats.js";
+import { MIN_REFRESH_INTERVAL_S } from "../lib/config.js";
 
 export interface LibraryStatsSettings {
   [key: string]: JsonValue;
@@ -160,13 +162,22 @@ export class LibraryStatsAction extends SingletonAction<LibraryStatsSettings> {
     }
   }
 
+  override async onWillDisappear(ev: WillDisappearEvent<LibraryStatsSettings>): Promise<void> {
+    const context = ev.action.id;
+    const timer = this.refreshTimers.get(context);
+    if (timer) clearInterval(timer);
+    this.refreshTimers.delete(context);
+    this.statsCache.delete(context);
+    this.statIndex.delete(context);
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────
 
   private setupAutoRefresh(
     actionObj: Action<LibraryStatsSettings>,
     settings: LibraryStatsSettings
   ): void {
-    const intervalMs = Math.max(30, settings.refreshInterval) * 1000;
+    const intervalMs = Math.max(MIN_REFRESH_INTERVAL_S, settings.refreshInterval) * 1000;
     const timer = setInterval(() => {
       this.refreshStats(actionObj, settings).catch(err =>
         streamDeck.logger.error("LibraryStats auto-refresh error:", err)

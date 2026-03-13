@@ -22,6 +22,7 @@ import streamDeck, {
   type KeyDownEvent,
   type KeyUpEvent,
   type WillAppearEvent,
+  type WillDisappearEvent,
   type DidReceiveSettingsEvent,
   type DialRotateEvent,
   type DialDownEvent,
@@ -33,6 +34,7 @@ import { detectMediaType } from "../lib/detector.js";
 import { getPattern } from "../lib/patterns.js";
 import { renameFolder, organizeWithFolderStructure } from "../lib/renamer.js";
 import { getLogFilePath } from "../lib/logger.js";
+import { LONG_PRESS_MS, STATUS_RESET_MS, DEFAULT_MIN_CONFIDENCE } from "../lib/config.js";
 
 export interface SmartFixSettings {
   [key: string]: JsonValue;
@@ -43,8 +45,6 @@ export interface SmartFixSettings {
   /** Minimum confidence level (0–1) required before applying changes */
   minConfidence: number;
 }
-
-const LONG_PRESS_MS = 500;
 
 @action({ UUID: "com.gameaday.mediamaid.smartfix" })
 export class SmartFixAction extends SingletonAction<SmartFixSettings> {
@@ -113,7 +113,7 @@ export class SmartFixAction extends SingletonAction<SmartFixSettings> {
       await ev.action.setSettings({
         folderPath: "",
         createFolderStructure: false,
-        minConfidence: 0.4
+        minConfidence: DEFAULT_MIN_CONFIDENCE
       });
     }
     if (ev.action.isKey() || ev.action.isDial()) {
@@ -134,6 +134,12 @@ export class SmartFixAction extends SingletonAction<SmartFixSettings> {
     if (ev.action.isKey() || ev.action.isDial()) {
       await ev.action.setTitle("Smart Fix");
     }
+  }
+
+  override async onWillDisappear(ev: WillDisappearEvent<SmartFixSettings>): Promise<void> {
+    const timer = this.pressTimers.get(ev.action.id);
+    if (timer !== undefined) clearTimeout(timer);
+    this.pressTimers.delete(ev.action.id);
   }
 
   // ── Helpers ──────────────────────────────────────────────────────
@@ -206,7 +212,7 @@ export class SmartFixAction extends SingletonAction<SmartFixSettings> {
         `SmartFix detected: ${detection.mediaType} (confidence ${(detection.confidence * 100).toFixed(0)}%) – ${detection.reason}`
       );
 
-      const minConf = settings.minConfidence ?? 0.4;
+      const minConf = settings.minConfidence ?? DEFAULT_MIN_CONFIDENCE;
 
       if (detection.confidence < minConf) {
         await actionObj.showAlert();
@@ -230,7 +236,7 @@ export class SmartFixAction extends SingletonAction<SmartFixSettings> {
           if (actionObj.isKey() || actionObj.isDial()) {
             actionObj.setTitle("Smart Fix");
           }
-        }, 3000);
+        }, STATUS_RESET_MS);
         return;
       }
 

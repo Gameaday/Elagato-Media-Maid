@@ -2,14 +2,15 @@
  * Downloads folder organizer for MediaMaid ("Nuke Downloads").
  *
  * Sorts files in a flat folder into categorized subfolders based on their
- * file extension.
+ * file extension. Uses the centralized extension registry from config.ts.
  */
 
-import { readdirSync, statSync } from "fs";
+import { readdirSync, statSync, existsSync } from "fs";
 import { rename, mkdir } from "fs/promises";
 import { join, extname } from "path";
 import { logOperation } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
+import { SORT_CATEGORIES, validateFolderPath } from "./config.js";
 
 export interface SortRule {
   /** Subfolder name to create */
@@ -18,41 +19,11 @@ export interface SortRule {
   extensions: Set<string>;
 }
 
-/** Default sorting rules */
-export const DEFAULT_SORT_RULES: SortRule[] = [
-  {
-    folder: "Images",
-    extensions: new Set([".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".heic", ".tiff", ".tif", ".raw", ".arw", ".cr2", ".nef"])
-  },
-  {
-    folder: "Videos",
-    extensions: new Set([".mp4", ".mkv", ".avi", ".mov", ".wmv", ".m4v", ".flv", ".webm", ".ts", ".mpg", ".mpeg"])
-  },
-  {
-    folder: "Audio",
-    extensions: new Set([".mp3", ".flac", ".aac", ".ogg", ".opus", ".wav", ".m4a", ".wma", ".alac"])
-  },
-  {
-    folder: "Documents",
-    extensions: new Set([".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".md", ".csv", ".rtf", ".odt", ".ods"])
-  },
-  {
-    folder: "eBooks",
-    extensions: new Set([".epub", ".mobi", ".azw", ".azw3", ".cbz", ".cbr"])
-  },
-  {
-    folder: "Installers",
-    extensions: new Set([".exe", ".msi", ".dmg", ".pkg", ".deb", ".rpm", ".appimage", ".iso", ".img"])
-  },
-  {
-    folder: "Archives",
-    extensions: new Set([".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz", ".zst"])
-  },
-  {
-    folder: "Code",
-    extensions: new Set([".js", ".ts", ".py", ".java", ".cs", ".cpp", ".c", ".h", ".go", ".rs", ".rb", ".php", ".html", ".css", ".json", ".xml", ".yaml", ".yml"])
-  }
-];
+/** Default sorting rules derived from centralized config */
+export const DEFAULT_SORT_RULES: SortRule[] = SORT_CATEGORIES.map(c => ({
+  folder: c.folder,
+  extensions: c.extensions
+}));
 
 export interface OrganizeResult {
   /** Map of folder name → files moved into it */
@@ -94,6 +65,12 @@ export async function sortFolder(
     errors: {}
   };
 
+  const pathCheck = validateFolderPath(folderPath);
+  if (!pathCheck.valid) {
+    result.errors["[folder]"] = pathCheck.reason ?? "Invalid path.";
+    return result;
+  }
+
   let entries: string[];
   try {
     entries = readdirSync(folderPath);
@@ -113,6 +90,7 @@ export async function sortFolder(
   });
 
   const undoOps: FileOperation[] = [];
+  const createdDirs = new Set<string>();
 
   for (const name of files) {
     const ext = extname(name).toLowerCase();
@@ -135,8 +113,12 @@ export async function sortFolder(
 
     if (!dryRun) {
       try {
+        const dirExisted = existsSync(targetDir);
         await mkdir(targetDir, { recursive: true });
-        undoOps.push({ type: "mkdir", from: "", to: targetDir });
+        if (!dirExisted && !createdDirs.has(targetDir)) {
+          undoOps.push({ type: "mkdir", from: "", to: targetDir });
+          createdDirs.add(targetDir);
+        }
         await rename(fromPath, toPath);
         undoOps.push({ type: "move", from: fromPath, to: toPath });
         result.totalMoved++;

@@ -15,6 +15,7 @@ import { parseTvPattern, parseYearFromFilename } from "./renamer.js";
 import { logOperation } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
 import { rename, mkdir } from "fs/promises";
+import { DEFAULT_MAX_DEPTH, validateFolderPath } from "./config.js";
 
 export interface ScanIssue {
   /** Full path to the problematic file */
@@ -47,7 +48,7 @@ export interface DeepScanResult {
 /**
  * Recursively collect all files from a directory tree.
  */
-function collectFilesRecursive(dir: string, maxDepth = 5, depth = 0): string[] {
+function collectFilesRecursive(dir: string, maxDepth = DEFAULT_MAX_DEPTH, depth = 0): string[] {
   if (depth > maxDepth) return [];
 
   const results: string[] = [];
@@ -127,6 +128,13 @@ export async function deepScan(
     errors: {},
     healthScore: 100
   };
+
+  const pathCheck = validateFolderPath(libraryRoot);
+  if (!pathCheck.valid) {
+    result.errors["[path]"] = pathCheck.reason ?? "Invalid path.";
+    result.healthScore = 0;
+    return result;
+  }
 
   const allFiles = collectFilesRecursive(libraryRoot);
   result.filesExamined = allFiles.length;

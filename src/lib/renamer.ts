@@ -5,13 +5,14 @@
  * Supports dry-run mode (preview only) and returns all operations for undo.
  */
 
-import { readdirSync, statSync } from "fs";
+import { readdirSync, statSync, existsSync } from "fs";
 import { rename, mkdir } from "fs/promises";
 import { join, extname, basename } from "path";
 import type { NamingPattern, FileMetadata } from "./patterns.js";
 import { findAndParseNfo } from "./nfo-parser.js";
 import { logOperation } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
+import { validateFolderPath } from "./config.js";
 
 export interface RenameOperation {
   /** Original full path */
@@ -39,31 +40,69 @@ export interface RenameResult {
  *   ShowName.S01E02.EpisodeTitle.mkv
  *   Show Name - 1x02 - Episode Title.mkv
  *   ShowName_S01E02_mkv
+ *   ShowName.S01E02E03.mkv  (multi-episode)
  */
 export function parseTvPattern(baseName: string): Partial<FileMetadata> {
   const meta: Partial<FileMetadata> = {};
 
-  // Standard SxxExx pattern
-  const seMatch = /^(.*?)[.\s_-]+[Ss](\d{1,2})[Ee](\d{1,2})(?:[.\s_-]+(.+))?$/.exec(baseName);
+  // Standard SxxExx pattern (with optional multi-episode)
+  const seMatch = /^(.*?)[.\s_-]+[Ss](\d{1,2})[Ee](\d{1,3})(?:[Ee]\d{1,3})?(?:[.\s_-]+(.+))?$/.exec(baseName);
   if (seMatch) {
     meta.title = seMatch[1].replace(/[._]/g, " ").trim();
     meta.season = parseInt(seMatch[2], 10);
     meta.episode = parseInt(seMatch[3], 10);
     if (seMatch[4]) {
-      meta.episodeTitle = seMatch[4].replace(/[._]/g, " ").trim();
+      meta.episodeTitle = seMatch[4]
+        .replace(/[._]/g, " ")
+        .replace(/\b(720p|1080p|2160p|4K|BluRay|WEB-?DL|HDTV|x264|x265|HEVC|AAC|DTS)\b.*/i, "")
+        .trim();
     }
     return meta;
   }
 
   // NxNN pattern (1x02)
-  const nxMatch = /^(.*?)[.\s_-]+(\d{1,2})x(\d{2})(?:[.\s_-]+(.+))?$/.exec(baseName);
+  const nxMatch = /^(.*?)[.\s_-]+(\d{1,2})x(\d{2,3})(?:[.\s_-]+(.+))?$/.exec(baseName);
   if (nxMatch) {
     meta.title = nxMatch[1].replace(/[._]/g, " ").trim();
     meta.season = parseInt(nxMatch[2], 10);
     meta.episode = parseInt(nxMatch[3], 10);
     if (nxMatch[4]) {
-      meta.episodeTitle = nxMatch[4].replace(/[._]/g, " ").trim();
+      meta.episodeTitle = nxMatch[4]
+        .replace(/[._]/g, " ")
+        .replace(/\b(720p|1080p|2160p|4K|BluRay|WEB-?DL|HDTV|x264|x265|HEVC|AAC|DTS)\b.*/i, "")
+        .trim();
     }
+    return meta;
+  }
+
+  return meta;
+}
+
+/**
+ * Parse music metadata from a filename.
+ * Handles formats like:
+ *   01 - Artist - Song Title
+ *   01. Artist - Song Title
+ *   Artist - Song Title
+ *   01 Song Title
+ */
+export function parseMusicPattern(baseName: string): Partial<FileMetadata> {
+  const meta: Partial<FileMetadata> = {};
+
+  // Track# - Artist - Song  OR  Track#. Artist - Song
+  const full = /^(\d{1,3})[.\s_-]+(.+?)\s*-\s*(.+)$/.exec(baseName);
+  if (full) {
+    meta.trackNumber = parseInt(full[1], 10);
+    meta.artist = full[2].trim();
+    meta.songTitle = full[3].trim();
+    return meta;
+  }
+
+  // Artist - Song (no track#)
+  const noTrack = /^(.+?)\s*-\s*(.+)$/.exec(baseName);
+  if (noTrack) {
+    meta.artist = noTrack[1].trim();
+    meta.songTitle = noTrack[2].trim();
     return meta;
   }
 
@@ -81,6 +120,7 @@ export function parseYearFromFilename(baseName: string): number | undefined {
 /**
  * Build FileMetadata from a filename and any NFO data.
  * NFO data takes precedence over filename parsing.
+ * Uses the appropriate parser based on the target pattern type.
  */
 async function buildMetadata(
   filePath: string,
@@ -92,23 +132,24 @@ async function buildMetadata(
 
   const nfoMeta = await findAndParseNfo(filePath);
 
-  // Start with filename-parsed data
-  const fromFilename: Partial<FileMetadata> = parseTvPattern(baseName);
+  // Choose parser based on pattern type
+  const fromTv = parseTvPattern(baseName);
+  const fromMusic = parseMusicPattern(baseName);
 
-  // Merge: NFO takes precedence
+  // Merge: NFO takes precedence, then pattern-appropriate parser
   const merged: FileMetadata = {
     baseName,
     ext,
     originalPath: filePath,
-    title: nfoMeta.title ?? fromFilename.title ?? baseName,
-    season: nfoMeta.season ?? fromFilename.season,
-    episode: nfoMeta.episode ?? fromFilename.episode,
-    episodeTitle: nfoMeta.episodeTitle ?? fromFilename.episodeTitle,
+    title: nfoMeta.title ?? fromTv.title ?? baseName,
+    season: nfoMeta.season ?? fromTv.season,
+    episode: nfoMeta.episode ?? fromTv.episode,
+    episodeTitle: nfoMeta.episodeTitle ?? fromTv.episodeTitle,
     year: nfoMeta.year ?? parseYearFromFilename(baseName),
-    artist: nfoMeta.artist,
+    artist: nfoMeta.artist ?? fromMusic.artist,
     album: nfoMeta.album,
-    trackNumber: nfoMeta.trackNumber,
-    songTitle: baseName,
+    trackNumber: nfoMeta.trackNumber ?? fromMusic.trackNumber,
+    songTitle: fromMusic.songTitle ?? baseName,
     index
   };
 
@@ -117,16 +158,21 @@ async function buildMetadata(
 
 /**
  * Ensure the proposed filename does not conflict with an existing file.
- * If it does, append a counter suffix.
+ * Checks both the in-memory tracking set and the actual filesystem to
+ * avoid race conditions with external modifications.
  */
 function deconflict(proposedPath: string, existingFiles: Set<string>): string {
-  if (!existingFiles.has(proposedPath)) return proposedPath;
+  if (!existingFiles.has(proposedPath) && !existsSync(proposedPath)) return proposedPath;
 
   const ext = extname(proposedPath);
   const base = proposedPath.slice(0, -ext.length);
   let counter = 2;
-  while (existingFiles.has(`${base} (${counter})${ext}`)) counter++;
-  return `${base} (${counter})${ext}`;
+  let candidate: string;
+  do {
+    candidate = `${base} (${counter})${ext}`;
+    counter++;
+  } while (existingFiles.has(candidate) || existsSync(candidate));
+  return candidate;
 }
 
 /**
@@ -148,6 +194,12 @@ export async function renameFolder(
     skipped: 0,
     errors: {}
   };
+
+  const pathCheck = validateFolderPath(folderPath);
+  if (!pathCheck.valid) {
+    result.errors["[folder]"] = pathCheck.reason ?? "Invalid path.";
+    return result;
+  }
 
   let entries: string[];
   try {
@@ -277,6 +329,7 @@ export async function organizeWithFolderStructure(
   });
 
   const undoOps: FileOperation[] = [];
+  const createdDirs = new Set<string>();
 
   for (let i = 0; i < targetFiles.length; i++) {
     const name = targetFiles[i];
@@ -306,8 +359,12 @@ export async function organizeWithFolderStructure(
 
     if (!dryRun) {
       try {
+        const dirExisted = existsSync(targetDir);
         await mkdir(targetDir, { recursive: true });
-        undoOps.push({ type: "mkdir", from: "", to: targetDir });
+        if (!dirExisted && !createdDirs.has(targetDir)) {
+          undoOps.push({ type: "mkdir", from: "", to: targetDir });
+          createdDirs.add(targetDir);
+        }
         await rename(fromPath, toPath);
         undoOps.push({ type: "move", from: fromPath, to: toPath });
         result.renamed++;

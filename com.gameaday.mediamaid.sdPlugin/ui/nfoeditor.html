@@ -1,32 +1,24 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NFO Editor Settings</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #2d2d2d; color: #d8d8d8; font-size: 12px; padding: 12px; }
-    .sdpi-wrapper { display: flex; flex-direction: column; gap: 12px; }
-    .sdpi-item { display: flex; align-items: center; gap: 8px; }
-    .sdpi-item label { flex: 0 0 90px; text-align: right; font-size: 11px; color: #9e9e9e; }
-    .sdpi-item input[type="text"], .sdpi-item select { flex: 1; background: #3b3b3b; border: 1px solid #4a4a4a; color: #d8d8d8; padding: 6px 8px; border-radius: 3px; font-size: 12px; outline: none; }
-    .sdpi-item input:focus, .sdpi-item select:focus { border-color: #0078d4; }
-    .sdpi-heading { font-size: 13px; font-weight: 600; color: #e8e8e8; padding-bottom: 4px; border-bottom: 1px solid #4a4a4a; margin-bottom: 4px; }
-    .sdpi-info { font-size: 10px; color: #888; padding: 4px 0; text-align: center; }
-    .sdpi-badge { display: inline-block; background: #ff9800; color: #000; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 3px; }
-  </style>
+  <link rel="stylesheet" href="mediamaid.css">
 </head>
 <body>
   <div class="sdpi-wrapper">
-    <div class="sdpi-heading">NFO Editor ★ <span class="sdpi-badge">PREMIUM</span></div>
+
+    <h1>NFO Editor <span class="badge premium">PREMIUM</span></h1>
 
     <div class="sdpi-item">
-      <label for="targetPath">Target Path</label>
+      <label class="sdpi-item-label" for="targetPath">Target Path</label>
       <input type="text" id="targetPath" placeholder="/path/to/media/file-or-folder">
+      <div id="pathStatus"></div>
     </div>
 
     <div class="sdpi-item">
-      <label for="nfoType">NFO Type</label>
+      <label class="sdpi-item-label" for="nfoType">NFO Type</label>
       <select id="nfoType">
         <option value="">Auto-detect</option>
         <option value="tvshow">TV Show</option>
@@ -38,56 +30,74 @@
     </div>
 
     <div class="sdpi-item">
-      <label for="licenseKey">License Key</label>
+      <label class="sdpi-item-label" for="licenseKey">License Key</label>
       <input type="text" id="licenseKey" placeholder="Enter license key for premium features">
     </div>
+
+    <hr class="sdpi-divider">
 
     <div class="sdpi-info">
       Create, edit, and update NFO metadata files for Jellyfin/Kodi.<br>
       <strong>Key:</strong> Short press = create/update · Long press = preview<br>
       <strong>Dial:</strong> Rotate to browse fields · Push to save · Touch to edit
     </div>
+
   </div>
 
   <script>
-    const $PI = {
-      websocket: null,
-      uuid: "",
-      actionInfo: {},
-      init(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
-        this.uuid = inPropertyInspectorUUID;
-        this.actionInfo = JSON.parse(inActionInfo);
-        this.websocket = new WebSocket("ws://127.0.0.1:" + inPort);
-        this.websocket.onopen = () => {
-          this.websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: this.uuid }));
-          this.websocket.send(JSON.stringify({ event: "getSettings", context: this.uuid }));
-        };
-        this.websocket.onmessage = (evt) => {
-          const msg = JSON.parse(evt.data);
-          if (msg.event === "didReceiveSettings") this.loadSettings(msg.payload.settings);
-        };
+    const targetPathEl  = document.getElementById("targetPath");
+    const nfoTypeEl     = document.getElementById("nfoType");
+    const licenseKeyEl  = document.getElementById("licenseKey");
+    const pathStatusEl  = document.getElementById("pathStatus");
 
-        document.getElementById("targetPath").addEventListener("change", () => this.saveSettings());
-        document.getElementById("nfoType").addEventListener("change", () => this.saveSettings());
-        document.getElementById("licenseKey").addEventListener("change", () => this.saveSettings());
-      },
-      loadSettings(settings) {
-        document.getElementById("targetPath").value = settings.targetPath || "";
-        document.getElementById("nfoType").value = settings.nfoType || "";
-        document.getElementById("licenseKey").value = settings.licenseKey || "";
-      },
-      saveSettings() {
-        const payload = {
-          targetPath: document.getElementById("targetPath").value,
-          nfoType: document.getElementById("nfoType").value,
-          licenseKey: document.getElementById("licenseKey").value
-        };
-        this.websocket.send(JSON.stringify({ event: "setSettings", context: this.uuid, payload }));
+    function validatePath() {
+      const path = targetPathEl.value.trim();
+      if (!path) { pathStatusEl.className = ""; pathStatusEl.textContent = ""; }
+      else if (!path.startsWith("/") && !path.match(/^[A-Za-z]:\\/)) {
+        pathStatusEl.className = "sdpi-warning";
+        pathStatusEl.textContent = "Path should be absolute.";
+      } else {
+        pathStatusEl.className = "sdpi-success";
+        pathStatusEl.textContent = "Ready.";
       }
-    };
+    }
+
+    function loadSettings(s) {
+      targetPathEl.value = s.targetPath || "";
+      nfoTypeEl.value = s.nfoType || "";
+      licenseKeyEl.value = s.licenseKey || "";
+      validatePath();
+    }
+
+    function saveSettings() {
+      const payload = {
+        targetPath: targetPathEl.value.trim(),
+        nfoType: nfoTypeEl.value,
+        licenseKey: licenseKeyEl.value.trim()
+      };
+      $PI.websocket && $PI.websocket.send(JSON.stringify({ event: "setSettings", context: $PI.uuid, payload }));
+    }
+
+    const $PI = { websocket: null, uuid: "" };
 
     function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
-      $PI.init(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo);
+      $PI.uuid = inPropertyInspectorUUID;
+      const actionInfo = JSON.parse(inActionInfo);
+      $PI.websocket = new WebSocket("ws://127.0.0.1:" + inPort);
+
+      $PI.websocket.onopen = () => {
+        $PI.websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: $PI.uuid }));
+        $PI.websocket.send(JSON.stringify({ event: "getSettings", context: $PI.uuid }));
+      };
+      $PI.websocket.onmessage = (evt) => {
+        const msg = JSON.parse(evt.data);
+        if (msg.event === "didReceiveSettings") loadSettings(msg.payload.settings);
+      };
+
+      loadSettings(actionInfo.payload?.settings ?? {});
+      targetPathEl.addEventListener("input", () => { validatePath(); saveSettings(); });
+      nfoTypeEl.addEventListener("change", saveSettings);
+      licenseKeyEl.addEventListener("change", saveSettings);
     }
   </script>
 </body>

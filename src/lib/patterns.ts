@@ -2,7 +2,17 @@
  * Naming pattern definitions for MediaMaid.
  * Each MediaType has a corresponding pattern that formats filenames
  * following a standard convention (Jellyfin/Plex, Photography, Music, etc.).
+ *
+ * All extension lists are sourced from the centralized config module.
  */
+
+import {
+  TV_VIDEO_EXTENSIONS,
+  PHOTO_EXTENSIONS,
+  MUSIC_EXTENSIONS,
+  BOOK_EXTENSIONS,
+  DOC_EXTENSIONS
+} from "./config.js";
 
 export enum MediaType {
   JELLYFIN_TV = "jellyfin_tv",
@@ -84,7 +94,7 @@ export function sanitizeFilename(name: string): string {
 export const jellyfinTvPattern: NamingPattern = {
   mediaType: MediaType.JELLYFIN_TV,
   label: "Jellyfin / Plex – TV Show",
-  extensions: [".mkv", ".mp4", ".avi", ".m4v", ".ts", ".mov", ".wmv", ".webm"],
+  extensions: TV_VIDEO_EXTENSIONS,
   format(meta) {
     const show = sanitizeFilename(meta.title ?? meta.baseName);
     const s = pad(meta.season ?? 1);
@@ -107,7 +117,7 @@ export const jellyfinTvPattern: NamingPattern = {
 export const jellyfinMoviePattern: NamingPattern = {
   mediaType: MediaType.JELLYFIN_MOVIE,
   label: "Jellyfin / Plex – Movie",
-  extensions: [".mkv", ".mp4", ".avi", ".m4v", ".mov", ".wmv", ".webm"],
+  extensions: TV_VIDEO_EXTENSIONS,
   format(meta) {
     const title = sanitizeFilename(meta.title ?? meta.baseName);
     const year = meta.year ? ` (${meta.year})` : "";
@@ -127,7 +137,7 @@ export const jellyfinMoviePattern: NamingPattern = {
 export const photographyPattern: NamingPattern = {
   mediaType: MediaType.PHOTOGRAPHY,
   label: "Photography – Date + Location",
-  extensions: [".jpg", ".jpeg", ".png", ".heic", ".raw", ".arw", ".cr2", ".nef", ".tiff", ".tif", ".webp"],
+  extensions: PHOTO_EXTENSIONS,
   format(meta) {
     const date = meta.dateTaken ?? new Date().toISOString().slice(0, 10);
     const loc = meta.location ? `_${sanitizeFilename(meta.location)}` : "";
@@ -144,7 +154,7 @@ export const photographyPattern: NamingPattern = {
 export const musicPattern: NamingPattern = {
   mediaType: MediaType.MUSIC,
   label: "Music – Track# Artist Song",
-  extensions: [".flac", ".mp3", ".aac", ".ogg", ".opus", ".wav", ".m4a", ".wma", ".alac"],
+  extensions: MUSIC_EXTENSIONS,
   format(meta) {
     const track = meta.trackNumber !== undefined ? `${pad(meta.trackNumber)} - ` : "";
     const artist = sanitizeFilename(meta.artist ?? "Unknown Artist");
@@ -165,7 +175,7 @@ export const musicPattern: NamingPattern = {
 export const booksPattern: NamingPattern = {
   mediaType: MediaType.BOOKS,
   label: "Books / eBooks – Author Title",
-  extensions: [".epub", ".mobi", ".azw", ".azw3", ".pdf", ".cbz", ".cbr"],
+  extensions: BOOK_EXTENSIONS,
   format(meta) {
     const author = sanitizeFilename(meta.artist ?? meta.title ?? "Unknown Author");
     const bookTitle = sanitizeFilename(meta.songTitle ?? meta.baseName);
@@ -183,7 +193,7 @@ export const booksPattern: NamingPattern = {
 export const genericDocsPattern: NamingPattern = {
   mediaType: MediaType.GENERIC_DOCS,
   label: "Documents – Date Prefixed",
-  extensions: [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".md", ".csv"],
+  extensions: DOC_EXTENSIONS,
   format(meta) {
     const date = meta.dateTaken ?? new Date().toISOString().slice(0, 10);
     const name = sanitizeFilename(meta.baseName);

@@ -22,6 +22,7 @@ import streamDeck, {
   type KeyDownEvent,
   type KeyUpEvent,
   type WillAppearEvent,
+  type WillDisappearEvent,
   type DidReceiveSettingsEvent,
   type DialRotateEvent,
   type DialDownEvent,
@@ -32,6 +33,7 @@ import type { JsonValue } from "@elgato/utils";
 import { MediaType, getPattern, ALL_PATTERNS } from "../lib/patterns.js";
 import { renameFolder, organizeWithFolderStructure } from "../lib/renamer.js";
 import { getLogFilePath } from "../lib/logger.js";
+import { LONG_PRESS_MS } from "../lib/config.js";
 
 export interface QuickRenameSettings {
   [key: string]: JsonValue;
@@ -43,9 +45,6 @@ export interface QuickRenameSettings {
   createFolderStructure: boolean;
 }
 
-const LONG_PRESS_MS = 500;
-
-/** Ordered list of media types for dial cycling */
 const PATTERN_CYCLE = ALL_PATTERNS.map(p => p.mediaType);
 
 @action({ UUID: "com.gameaday.mediamaid.quickrename" })
@@ -123,6 +122,12 @@ export class QuickRenameAction extends SingletonAction<QuickRenameSettings> {
 
   override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<QuickRenameSettings>): Promise<void> {
     await this.updateDisplay(ev.action, ev.payload.settings);
+  }
+
+  override async onWillDisappear(ev: WillDisappearEvent<QuickRenameSettings>): Promise<void> {
+    const timer = this.pressTimers.get(ev.action.id);
+    if (timer !== undefined) clearTimeout(timer);
+    this.pressTimers.delete(ev.action.id);
   }
 
   // ── Helpers ──────────────────────────────────────────────────────

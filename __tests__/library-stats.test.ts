@@ -45,10 +45,10 @@ describe("calculateLibraryStats", () => {
 
     const stats = calculateLibraryStats(TEST_ROOT);
     expect(stats.totalFiles).toBe(5);
-    expect(stats.categoryCounts["Video"]).toBe(2);
-    expect(stats.categoryCounts["Photo"]).toBe(1);
+    expect(stats.categoryCounts["Videos"]).toBe(2);
+    expect(stats.categoryCounts["Images"]).toBe(1);
     expect(stats.categoryCounts["Audio"]).toBe(1);
-    expect(stats.categoryCounts["Doc"]).toBe(1);
+    expect(stats.categoryCounts["Documents"]).toBe(1);
   });
 
   it("counts total size correctly", () => {
@@ -85,7 +85,7 @@ describe("calculateLibraryStats", () => {
 
     const stats = calculateLibraryStats(TEST_ROOT);
     expect(stats.totalFiles).toBe(3);
-    expect(stats.categoryCounts["Video"]).toBe(3);
+    expect(stats.categoryCounts["Videos"]).toBe(3);
   });
 
   it("detects media type and confidence", () => {

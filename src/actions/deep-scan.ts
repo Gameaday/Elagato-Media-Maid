@@ -21,6 +21,7 @@ import streamDeck, {
   type KeyDownEvent,
   type KeyUpEvent,
   type WillAppearEvent,
+  type WillDisappearEvent,
   type DidReceiveSettingsEvent,
   type DialRotateEvent,
   type DialDownEvent,
@@ -29,6 +30,7 @@ import streamDeck, {
 import type { JsonValue } from "@elgato/utils";
 
 import { deepScan, type DeepScanResult } from "../lib/deep-scanner.js";
+import { LONG_PRESS_MS, SCAN_RESET_MS } from "../lib/config.js";
 
 export interface DeepScanSettings {
   [key: string]: JsonValue;
@@ -37,8 +39,6 @@ export interface DeepScanSettings {
   /** Whether to automatically fix issues */
   autoFix: boolean;
 }
-
-const LONG_PRESS_MS = 500;
 
 @action({ UUID: "com.gameaday.mediamaid.deepscan" })
 export class DeepScanAction extends SingletonAction<DeepScanSettings> {
@@ -136,6 +136,14 @@ export class DeepScanAction extends SingletonAction<DeepScanSettings> {
     }
   }
 
+  override async onWillDisappear(ev: WillDisappearEvent<DeepScanSettings>): Promise<void> {
+    const timer = this.pressTimers.get(ev.action.id);
+    if (timer !== undefined) clearTimeout(timer);
+    this.pressTimers.delete(ev.action.id);
+    this.lastResults.delete(ev.action.id);
+    this.issueIndex.delete(ev.action.id);
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────
 
   private async performScan(
@@ -202,7 +210,7 @@ export class DeepScanAction extends SingletonAction<DeepScanSettings> {
         if (actionObj.isKey() || actionObj.isDial()) {
           actionObj.setTitle("Deep\nScan");
         }
-      }, 5000);
+      }, SCAN_RESET_MS);
     } catch (err) {
       await actionObj.showAlert();
       streamDeck.logger.error("DeepScan fatal error:", err);
