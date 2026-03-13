@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Library Stats Settings</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #2d2d2d; color: #d8d8d8; font-size: 12px; padding: 12px; }
+    .sdpi-wrapper { display: flex; flex-direction: column; gap: 12px; }
+    .sdpi-item { display: flex; align-items: center; gap: 8px; }
+    .sdpi-item label { flex: 0 0 90px; text-align: right; font-size: 11px; color: #9e9e9e; }
+    .sdpi-item input[type="text"], .sdpi-item input[type="number"] { flex: 1; background: #3b3b3b; border: 1px solid #4a4a4a; color: #d8d8d8; padding: 6px 8px; border-radius: 3px; font-size: 12px; outline: none; }
+    .sdpi-item input:focus { border-color: #0078d4; }
+    .sdpi-heading { font-size: 13px; font-weight: 600; color: #e8e8e8; padding-bottom: 4px; border-bottom: 1px solid #4a4a4a; margin-bottom: 4px; }
+    .sdpi-info { font-size: 10px; color: #888; padding: 4px 0; text-align: center; }
+    .sdpi-badge { display: inline-block; background: #4fc3f7; color: #000; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div class="sdpi-wrapper">
+    <div class="sdpi-heading">Library Stats <span class="sdpi-badge">SD+ ONLY</span></div>
+
+    <div class="sdpi-item">
+      <label for="libraryRoot">Library Root</label>
+      <input type="text" id="libraryRoot" placeholder="/path/to/media/library">
+    </div>
+
+    <div class="sdpi-item">
+      <label for="refreshInterval">Auto-refresh</label>
+      <input type="number" id="refreshInterval" min="0" max="3600" step="30" placeholder="0">
+      <span style="font-size: 10px; color: #888;">sec (0 = manual)</span>
+    </div>
+
+    <div class="sdpi-info">
+      Stream Deck+ exclusive. Displays library statistics on the touchscreen.<br>
+      <strong>Dial:</strong> Rotate to cycle stats · Push to refresh · Touch for details
+    </div>
+  </div>
+
+  <script>
+    const $PI = {
+      websocket: null,
+      uuid: "",
+      actionInfo: {},
+      init(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
+        this.uuid = inPropertyInspectorUUID;
+        this.actionInfo = JSON.parse(inActionInfo);
+        this.websocket = new WebSocket("ws://127.0.0.1:" + inPort);
+        this.websocket.onopen = () => {
+          this.websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: this.uuid }));
+          this.websocket.send(JSON.stringify({ event: "getSettings", context: this.uuid }));
+        };
+        this.websocket.onmessage = (evt) => {
+          const msg = JSON.parse(evt.data);
+          if (msg.event === "didReceiveSettings") this.loadSettings(msg.payload.settings);
+        };
+
+        document.getElementById("libraryRoot").addEventListener("change", () => this.saveSettings());
+        document.getElementById("refreshInterval").addEventListener("change", () => this.saveSettings());
+      },
+      loadSettings(settings) {
+        document.getElementById("libraryRoot").value = settings.libraryRoot || "";
+        document.getElementById("refreshInterval").value = settings.refreshInterval || 0;
+      },
+      saveSettings() {
+        const payload = {
+          libraryRoot: document.getElementById("libraryRoot").value,
+          refreshInterval: parseInt(document.getElementById("refreshInterval").value) || 0
+        };
+        this.websocket.send(JSON.stringify({ event: "setSettings", context: this.uuid, payload }));
+      }
+    };
+
+    function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
+      $PI.init(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo);
+    }
+  </script>
+</body>
+</html>

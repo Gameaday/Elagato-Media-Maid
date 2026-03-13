@@ -4,17 +4,28 @@
  * Analyzes the configured folder, detects the dominant media type,
  * then applies the appropriate naming pattern automatically.
  *
- * Short press  → auto-detect and apply rename
- * Long press   → dry-run preview (logged, no files changed)
+ * Keypad:
+ *   Short press  → auto-detect and apply rename
+ *   Long press   → dry-run preview (logged, no files changed)
+ *
+ * Encoder (Stream Deck+):
+ *   Rotate       → adjust confidence threshold (±5%)
+ *   Push         → auto-detect and apply rename
+ *   Touch        → dry-run preview
+ *   Long Touch   → rescan folder and show detection result
  */
 
 import streamDeck, {
   action,
   SingletonAction,
+  type Action,
   type KeyDownEvent,
   type KeyUpEvent,
   type WillAppearEvent,
-  type DidReceiveSettingsEvent
+  type DidReceiveSettingsEvent,
+  type DialRotateEvent,
+  type DialDownEvent,
+  type TouchTapEvent
 } from "@elgato/streamdeck";
 import type { JsonValue } from "@elgato/utils";
 
@@ -39,11 +50,13 @@ const LONG_PRESS_MS = 500;
 export class SmartFixAction extends SingletonAction<SmartFixSettings> {
   private pressTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+  // ── Keypad handlers ──────────────────────────────────────────────
+
   override async onKeyDown(ev: KeyDownEvent<SmartFixSettings>): Promise<void> {
     const context = ev.action.id;
     const timer = setTimeout(() => {
       this.pressTimers.delete(context);
-      this.performSmartFix(ev, true).catch(err =>
+      this.performSmartFix(ev.action, ev.payload.settings, true).catch(err =>
         streamDeck.logger.error("SmartFix long-press error:", err)
       );
     }, LONG_PRESS_MS);
@@ -56,9 +69,43 @@ export class SmartFixAction extends SingletonAction<SmartFixSettings> {
     if (timer !== undefined) {
       clearTimeout(timer);
       this.pressTimers.delete(context);
-      await this.performSmartFix(ev, false);
+      await this.performSmartFix(ev.action, ev.payload.settings, false);
     }
   }
+
+  // ── Encoder handlers (Stream Deck+) ──────────────────────────────
+
+  override async onDialRotate(ev: DialRotateEvent<SmartFixSettings>): Promise<void> {
+    const { settings } = ev.payload;
+    const delta = ev.payload.ticks > 0 ? 0.05 : -0.05;
+    const newConf = Math.max(0.1, Math.min(1.0, (settings.minConfidence ?? 0.4) + delta));
+    const rounded = Math.round(newConf * 100) / 100;
+
+    await ev.action.setSettings({ ...settings, minConfidence: rounded });
+
+    await ev.action.setFeedback({
+      "title": "Smart Fix",
+      "detected-type": `Threshold: ${Math.round(rounded * 100)}%`,
+      "confidence-bar": { value: Math.round(rounded * 100) },
+      "confidence-text": rounded <= 0.3 ? "Low – more matches" : rounded >= 0.7 ? "High – strict" : "Balanced"
+    });
+  }
+
+  override async onDialDown(ev: DialDownEvent<SmartFixSettings>): Promise<void> {
+    await this.performSmartFix(ev.action, ev.payload.settings, false);
+  }
+
+  override async onTouchTap(ev: TouchTapEvent<SmartFixSettings>): Promise<void> {
+    if (ev.payload.hold) {
+      // Long touch – rescan and show detection without fixing
+      await this.performRescan(ev.action, ev.payload.settings);
+    } else {
+      // Short touch – dry-run preview
+      await this.performSmartFix(ev.action, ev.payload.settings, true);
+    }
+  }
+
+  // ── Lifecycle ────────────────────────────────────────────────────
 
   override async onWillAppear(ev: WillAppearEvent<SmartFixSettings>): Promise<void> {
     const { settings } = ev.payload;
@@ -69,27 +116,90 @@ export class SmartFixAction extends SingletonAction<SmartFixSettings> {
         minConfidence: 0.4
       });
     }
-    await ev.action.setTitle("Smart Fix");
+    if (ev.action.isKey() || ev.action.isDial()) {
+      await ev.action.setTitle("Smart Fix");
+    }
+
+    if (ev.action.isDial()) {
+      await ev.action.setFeedback({
+        "title": "Smart Fix",
+        "detected-type": "Not scanned",
+        "confidence-bar": { value: 0 },
+        "confidence-text": settings.folderPath ? "Ready to scan" : "Set folder path"
+      });
+    }
   }
 
   override async onDidReceiveSettings(ev: DidReceiveSettingsEvent<SmartFixSettings>): Promise<void> {
-    await ev.action.setTitle("Smart Fix");
+    if (ev.action.isKey() || ev.action.isDial()) {
+      await ev.action.setTitle("Smart Fix");
+    }
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────
+
+  private async performRescan(
+    actionObj: Action<SmartFixSettings>,
+    settings: SmartFixSettings
+  ): Promise<void> {
+    if (!settings.folderPath) {
+      await actionObj.showAlert();
+      return;
+    }
+
+    try {
+      if (actionObj.isDial()) {
+        await actionObj.setFeedback({
+          "title": "Scanning…",
+          "detected-type": "",
+          "confidence-bar": { value: 50 },
+          "confidence-text": "Analyzing folder…"
+        });
+      }
+
+      const detection = detectMediaType(settings.folderPath);
+      const pattern = getPattern(detection.mediaType);
+
+      if (actionObj.isDial()) {
+        await actionObj.setFeedback({
+          "title": "Smart Fix",
+          "detected-type": pattern?.label ?? detection.mediaType,
+          "confidence-bar": { value: Math.round(detection.confidence * 100) },
+          "confidence-text": `${Math.round(detection.confidence * 100)}% – ${detection.reason}`
+        });
+      }
+
+      streamDeck.logger.info(`SmartFix rescan: ${detection.mediaType} (${Math.round(detection.confidence * 100)}%)`);
+    } catch (err) {
+      await actionObj.showAlert();
+      streamDeck.logger.error("SmartFix rescan error:", err);
+    }
   }
 
   private async performSmartFix(
-    ev: KeyDownEvent<SmartFixSettings> | KeyUpEvent<SmartFixSettings>,
+    actionObj: Action<SmartFixSettings>,
+    settings: SmartFixSettings,
     dryRun: boolean
   ): Promise<void> {
-    const { settings } = ev.payload;
-
     if (!settings.folderPath) {
-      await ev.action.showAlert();
+      await actionObj.showAlert();
       streamDeck.logger.warn("SmartFix: no folder path configured.");
       return;
     }
 
     try {
-      await ev.action.setTitle(dryRun ? "Scanning…" : "Fixing…");
+      if (actionObj.isKey() || actionObj.isDial()) {
+        await actionObj.setTitle(dryRun ? "Scanning…" : "Fixing…");
+      }
+
+      if (actionObj.isDial()) {
+        await actionObj.setFeedback({
+          "title": dryRun ? "Dry Run" : "Fixing",
+          "detected-type": "Detecting…",
+          "confidence-bar": { value: 25 },
+          "confidence-text": "Analyzing…"
+        });
+      }
 
       const detection = detectMediaType(settings.folderPath);
       streamDeck.logger.info(
@@ -99,20 +209,45 @@ export class SmartFixAction extends SingletonAction<SmartFixSettings> {
       const minConf = settings.minConfidence ?? 0.4;
 
       if (detection.confidence < minConf) {
-        await ev.action.showAlert();
+        await actionObj.showAlert();
         streamDeck.logger.warn(
           `SmartFix: confidence ${detection.confidence.toFixed(2)} below threshold ${minConf}. No changes made.`
         );
-        await ev.action.setTitle("Low Conf.");
-        setTimeout(() => ev.action.setTitle("Smart Fix"), 3000);
+        if (actionObj.isKey() || actionObj.isDial()) {
+          await actionObj.setTitle("Low Conf.");
+        }
+
+        if (actionObj.isDial()) {
+          await actionObj.setFeedback({
+            "title": "Low Confidence",
+            "detected-type": detection.mediaType.replace(/_/g, " "),
+            "confidence-bar": { value: Math.round(detection.confidence * 100) },
+            "confidence-text": `${Math.round(detection.confidence * 100)}% < ${Math.round(minConf * 100)}% threshold`
+          });
+        }
+
+        setTimeout(() => {
+          if (actionObj.isKey() || actionObj.isDial()) {
+            actionObj.setTitle("Smart Fix");
+          }
+        }, 3000);
         return;
       }
 
       const pattern = getPattern(detection.mediaType);
       if (!pattern) {
-        await ev.action.showAlert();
+        await actionObj.showAlert();
         streamDeck.logger.warn(`SmartFix: no pattern found for type "${detection.mediaType}"`);
         return;
+      }
+
+      if (actionObj.isDial()) {
+        await actionObj.setFeedback({
+          "title": dryRun ? "Dry Run" : "Fixing",
+          "detected-type": pattern.label,
+          "confidence-bar": { value: Math.round(detection.confidence * 100) },
+          "confidence-text": "Applying…"
+        });
       }
 
       const fn = settings.createFolderStructure
@@ -120,14 +255,13 @@ export class SmartFixAction extends SingletonAction<SmartFixSettings> {
         : renameFolder;
 
       const result = await fn(settings.folderPath, pattern, dryRun);
-
       const hasErrors = Object.keys(result.errors).length > 0;
 
       if (hasErrors) {
-        await ev.action.showAlert();
+        await actionObj.showAlert();
         streamDeck.logger.error("SmartFix errors:", result.errors);
-      } else {
-        await ev.action.showOk();
+      } else if (actionObj.isKey()) {
+        await actionObj.showOk();
       }
 
       const summary = dryRun
@@ -135,11 +269,24 @@ export class SmartFixAction extends SingletonAction<SmartFixSettings> {
         : `SmartFix [${pattern.label}]: Renamed ${result.renamed}, skipped ${result.skipped}.`;
 
       streamDeck.logger.info(summary);
+
+      if (actionObj.isDial()) {
+        await actionObj.setFeedback({
+          "title": "Smart Fix",
+          "detected-type": pattern.label,
+          "confidence-bar": { value: 100 },
+          "confidence-text": dryRun
+            ? `Preview: ${result.operations.length} file(s)`
+            : `Done: ${result.renamed} renamed`
+        });
+      }
     } catch (err) {
-      await ev.action.showAlert();
+      await actionObj.showAlert();
       streamDeck.logger.error("SmartFix fatal error:", err);
     } finally {
-      await ev.action.setTitle("Smart Fix");
+      if (actionObj.isKey() || actionObj.isDial()) {
+        await actionObj.setTitle("Smart Fix");
+      }
     }
   }
 }
