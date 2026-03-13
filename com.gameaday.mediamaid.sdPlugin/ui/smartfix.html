@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Fix – MediaMaid</title>
+  <style>
+    :root {
+      --bg: #1e1e1e; --surface: #2a2a2a; --border: #3a3a3a;
+      --text: #e0e0e0; --text-muted: #888; --accent: #4a9eff;
+      font-size: 13px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      padding: 12px;
+    }
+    .field { margin-bottom: 12px; }
+    label {
+      display: block; color: var(--text-muted); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;
+    }
+    input[type="text"], input[type="range"] {
+      width: 100%; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 4px; color: var(--text); padding: 6px 8px;
+      font-size: 13px; outline: none;
+    }
+    input[type="text"]:focus { border-color: var(--accent); }
+    input[type="range"] { padding: 0; border: none; background: none; accent-color: var(--accent); }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; }
+    input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+    .help { color: var(--text-muted); font-size: 11px; margin-top: 4px; line-height: 1.4; }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+    .range-row { display: flex; align-items: center; gap: 8px; }
+    .range-val { color: var(--accent); font-weight: bold; min-width: 32px; text-align: right; }
+  </style>
+</head>
+<body>
+
+  <div class="field">
+    <label for="folderPath">Target Folder</label>
+    <input type="text" id="folderPath" placeholder="/path/to/your/downloads">
+    <p class="help">MediaMaid will scan this folder and auto-detect the media type.</p>
+  </div>
+
+  <div class="field">
+    <label>Minimum Confidence</label>
+    <div class="range-row">
+      <input type="range" id="minConfidence" min="0" max="100" value="40" step="5">
+      <span class="range-val" id="confLabel">40%</span>
+    </div>
+    <p class="help">Only apply changes if the detected type confidence meets this threshold.</p>
+  </div>
+
+  <div class="field">
+    <div class="checkbox-row">
+      <input type="checkbox" id="createFolderStructure">
+      <label for="createFolderStructure" style="text-transform:none;font-size:13px;">Create folder structure</label>
+    </div>
+    <p class="help">Also moves files into organised subfolders when the pattern supports it.</p>
+  </div>
+
+  <hr class="divider">
+  <p class="help">
+    <strong>Short press</strong> – auto-detect and rename<br>
+    <strong>Long press (&gt;0.5 s)</strong> – dry run (preview in log, no changes)
+  </p>
+
+  <script>
+    const folderPathEl = document.getElementById("folderPath");
+    const minConfEl    = document.getElementById("minConfidence");
+    const confLabelEl  = document.getElementById("confLabel");
+    const createFSEl   = document.getElementById("createFolderStructure");
+
+    minConfEl.addEventListener("input", () => {
+      confLabelEl.textContent = minConfEl.value + "%";
+    });
+
+    function loadSettings(s) {
+      if (s.folderPath         !== undefined) folderPathEl.value = s.folderPath;
+      if (s.minConfidence      !== undefined) {
+        minConfEl.value = Math.round(s.minConfidence * 100);
+        confLabelEl.textContent = minConfEl.value + "%";
+      }
+      if (s.createFolderStructure !== undefined) createFSEl.checked = s.createFolderStructure;
+    }
+
+    function saveSettings() {
+      window.sendToPlugin && window.sendToPlugin({
+        event: "setSettings",
+        payload: {
+          folderPath:            folderPathEl.value.trim(),
+          minConfidence:         parseInt(minConfEl.value, 10) / 100,
+          createFolderStructure: createFSEl.checked
+        }
+      });
+    }
+
+    function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
+      const websocket = new WebSocket("ws://127.0.0.1:" + inPort);
+      const actionInfo = JSON.parse(inActionInfo);
+      loadSettings(actionInfo.payload?.settings ?? {});
+
+      websocket.onopen = () => {
+        websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: inPropertyInspectorUUID }));
+      };
+      websocket.onmessage = (evt) => {
+        const msg = JSON.parse(evt.data);
+        if (msg.event === "didReceiveSettings") loadSettings(msg.payload.settings ?? {});
+      };
+      window.sendToPlugin = (payload) => {
+        websocket.send(JSON.stringify({ event: "setSettings", context: inPropertyInspectorUUID, payload: payload.payload }));
+      };
+
+      folderPathEl.addEventListener("change", saveSettings);
+      minConfEl.addEventListener("change", saveSettings);
+      createFSEl.addEventListener("change", saveSettings);
+    }
+  </script>
+</body>
+</html>

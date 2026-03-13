@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quick Rename – MediaMaid</title>
+  <style>
+    :root {
+      --bg: #1e1e1e;
+      --surface: #2a2a2a;
+      --border: #3a3a3a;
+      --text: #e0e0e0;
+      --text-muted: #888;
+      --accent: #4a9eff;
+      --danger: #ff6b6b;
+      font-size: 13px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      padding: 12px;
+    }
+    .field { margin-bottom: 12px; }
+    label {
+      display: block;
+      color: var(--text-muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+    }
+    input[type="text"], select {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      padding: 6px 8px;
+      font-size: 13px;
+      outline: none;
+    }
+    input[type="text"]:focus, select:focus {
+      border-color: var(--accent);
+    }
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+    .help {
+      color: var(--text-muted);
+      font-size: 11px;
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 12px 0;
+    }
+    .preview {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 8px;
+      font-size: 11px;
+      color: var(--accent);
+      font-family: monospace;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="field">
+    <label for="folderPath">Target Folder</label>
+    <input type="text" id="folderPath" placeholder="/path/to/your/media/folder">
+    <p class="help">Absolute path to the folder containing files to rename.</p>
+  </div>
+
+  <div class="field">
+    <label for="mediaType">Naming Standard</label>
+    <select id="mediaType">
+      <option value="jellyfin_tv">Jellyfin / Plex – TV Show</option>
+      <option value="jellyfin_movie">Jellyfin / Plex – Movie</option>
+      <option value="photography">Photography – Date + Location</option>
+      <option value="music">Music – Track# Artist Song</option>
+      <option value="books">Books / eBooks – Author Title</option>
+      <option value="generic_docs">Documents – Date Prefixed</option>
+    </select>
+  </div>
+
+  <div id="previewRow" class="field">
+    <label>Format Preview</label>
+    <div class="preview" id="formatPreview">Show Name - S01E01 - Episode Title.mkv</div>
+  </div>
+
+  <div class="field">
+    <div class="checkbox-row">
+      <input type="checkbox" id="createFolderStructure">
+      <label for="createFolderStructure" style="text-transform:none;font-size:13px;">Create folder structure</label>
+    </div>
+    <p class="help">Also moves files into organised subfolders (e.g., Season 01, Artist/Album).</p>
+  </div>
+
+  <hr class="divider">
+  <p class="help">
+    <strong>Short press</strong> – rename files<br>
+    <strong>Long press (&gt;0.5 s)</strong> – dry run (preview in log, no changes)
+  </p>
+
+  <script>
+    const PREVIEWS = {
+      jellyfin_tv:    "Show Name - S01E02 - Episode Title.mkv",
+      jellyfin_movie: "Movie Title (2024).mkv",
+      photography:    "2024-06-15_Paris_001.jpg",
+      music:          "01 - Artist Name - Song Title.flac",
+      books:          "Author Name - Book Title.epub",
+      generic_docs:   "2024-06-15_Original Filename.pdf"
+    };
+
+    const HAS_FOLDER = {
+      jellyfin_tv:    true,
+      jellyfin_movie: true,
+      photography:    false,
+      music:          true,
+      books:          true,
+      generic_docs:   false
+    };
+
+    const folderPathEl = document.getElementById("folderPath");
+    const mediaTypeEl  = document.getElementById("mediaType");
+    const createFSEl   = document.getElementById("createFolderStructure");
+    const previewEl    = document.getElementById("formatPreview");
+
+    function updatePreview() {
+      const type = mediaTypeEl.value;
+      previewEl.textContent = PREVIEWS[type] || "";
+      createFSEl.disabled = !HAS_FOLDER[type];
+    }
+
+    // Load settings from Stream Deck
+    function loadSettings(settings) {
+      if (settings.folderPath !== undefined) folderPathEl.value = settings.folderPath;
+      if (settings.mediaType  !== undefined) mediaTypeEl.value  = settings.mediaType;
+      if (settings.createFolderStructure !== undefined) createFSEl.checked = settings.createFolderStructure;
+      updatePreview();
+    }
+
+    function saveSettings() {
+      window.sendToPlugin({
+        event: "setSettings",
+        payload: {
+          folderPath:            folderPathEl.value.trim(),
+          mediaType:             mediaTypeEl.value,
+          createFolderStructure: createFSEl.checked
+        }
+      });
+    }
+
+    // Stream Deck PI bridge
+    function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
+      const websocket = new WebSocket("ws://127.0.0.1:" + inPort);
+      const actionInfo = JSON.parse(inActionInfo);
+      const settings = actionInfo.payload?.settings ?? {};
+      loadSettings(settings);
+
+      websocket.onopen = () => {
+        websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: inPropertyInspectorUUID }));
+      };
+
+      websocket.onmessage = (evt) => {
+        const msg = JSON.parse(evt.data);
+        if (msg.event === "didReceiveSettings") {
+          loadSettings(msg.payload.settings ?? {});
+        }
+      };
+
+      window.sendToPlugin = (payload) => {
+        websocket.send(JSON.stringify({
+          event:   "setSettings",
+          context: inPropertyInspectorUUID,
+          payload: payload.payload
+        }));
+      };
+
+      folderPathEl.addEventListener("change", saveSettings);
+      mediaTypeEl.addEventListener("change",  () => { updatePreview(); saveSettings(); });
+      createFSEl.addEventListener("change",   saveSettings);
+    }
+
+    mediaTypeEl.addEventListener("change", updatePreview);
+    updatePreview();
+  </script>
+</body>
+</html>

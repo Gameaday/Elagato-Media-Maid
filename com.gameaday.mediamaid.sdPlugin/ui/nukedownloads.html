@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nuke Downloads – MediaMaid</title>
+  <style>
+    :root {
+      --bg: #1e1e1e; --surface: #2a2a2a; --border: #3a3a3a;
+      --text: #e0e0e0; --text-muted: #888; --accent: #4a9eff;
+      font-size: 13px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      padding: 12px;
+    }
+    .field { margin-bottom: 12px; }
+    label {
+      display: block; color: var(--text-muted); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;
+    }
+    input[type="text"] {
+      width: 100%; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 4px; color: var(--text); padding: 6px 8px;
+      font-size: 13px; outline: none;
+    }
+    input[type="text"]:focus { border-color: var(--accent); }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; }
+    input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+    .help { color: var(--text-muted); font-size: 11px; margin-top: 4px; line-height: 1.4; }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+    .categories {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+      padding: 8px; font-size: 11px; line-height: 1.8; color: var(--text-muted);
+    }
+    .categories span { color: var(--accent); }
+  </style>
+</head>
+<body>
+
+  <div class="field">
+    <label for="folderPath">Target Folder</label>
+    <input type="text" id="folderPath" placeholder="/Users/you/Downloads">
+    <p class="help">Files in this folder will be sorted into categorized subfolders.</p>
+  </div>
+
+  <div class="field">
+    <label>Categories Created</label>
+    <div class="categories">
+      <span>Images</span> · jpg, jpeg, png, gif, heic, raw, webp…<br>
+      <span>Videos</span> · mp4, mkv, avi, mov, wmv, webm…<br>
+      <span>Audio</span> · mp3, flac, aac, ogg, wav, m4a…<br>
+      <span>Documents</span> · pdf, doc, docx, xls, txt, md…<br>
+      <span>eBooks</span> · epub, mobi, azw, cbz, cbr…<br>
+      <span>Installers</span> · exe, msi, dmg, pkg, iso…<br>
+      <span>Archives</span> · zip, rar, 7z, tar, gz…<br>
+      <span>Code</span> · js, ts, py, java, go, rs…<br>
+      <span>Other</span> · everything else (if enabled below)
+    </div>
+  </div>
+
+  <div class="field">
+    <div class="checkbox-row">
+      <input type="checkbox" id="createOtherFolder" checked>
+      <label for="createOtherFolder" style="text-transform:none;font-size:13px;">Create "Other" folder for unrecognised files</label>
+    </div>
+  </div>
+
+  <hr class="divider">
+  <p class="help">
+    <strong>Short press</strong> – sort files into subfolders<br>
+    <strong>Long press (&gt;0.5 s)</strong> – dry run (preview in log, no changes)
+  </p>
+
+  <script>
+    const folderPathEl    = document.getElementById("folderPath");
+    const createOtherEl   = document.getElementById("createOtherFolder");
+
+    function loadSettings(s) {
+      if (s.folderPath        !== undefined) folderPathEl.value  = s.folderPath;
+      if (s.createOtherFolder !== undefined) createOtherEl.checked = s.createOtherFolder;
+    }
+
+    function saveSettings() {
+      window.sendToPlugin && window.sendToPlugin({
+        event: "setSettings",
+        payload: {
+          folderPath:       folderPathEl.value.trim(),
+          createOtherFolder: createOtherEl.checked
+        }
+      });
+    }
+
+    function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
+      const websocket = new WebSocket("ws://127.0.0.1:" + inPort);
+      const actionInfo = JSON.parse(inActionInfo);
+      loadSettings(actionInfo.payload?.settings ?? {});
+
+      websocket.onopen = () => {
+        websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: inPropertyInspectorUUID }));
+      };
+      websocket.onmessage = (evt) => {
+        const msg = JSON.parse(evt.data);
+        if (msg.event === "didReceiveSettings") loadSettings(msg.payload.settings ?? {});
+      };
+      window.sendToPlugin = (payload) => {
+        websocket.send(JSON.stringify({ event: "setSettings", context: inPropertyInspectorUUID, payload: payload.payload }));
+      };
+
+      folderPathEl.addEventListener("change", saveSettings);
+      createOtherEl.addEventListener("change", saveSettings);
+    }
+  </script>
+</body>
+</html>
