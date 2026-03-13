@@ -259,7 +259,21 @@ button.secondary:hover {
   margin: 8px 0;
 }
 
-/* ── Badge (for premium markers) ───────────────────────────────── */
+/* ── Categories list (Nuke Downloads PI) ───────────────────────── */
+
+.categories {
+  background: #1e1e1e;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--text-dim);
+}
+
+.categories strong {
+  color: var(--accent);
+}
 
 .badge {
   display: inline-block;

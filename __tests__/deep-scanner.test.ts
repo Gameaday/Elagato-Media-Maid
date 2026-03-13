@@ -62,7 +62,7 @@ describe("deepScan", () => {
     expect(result.filesExamined).toBe(0);
   });
 
-  it("in dry-run mode, counts fixed but does not rename files", async () => {
+  it("in dry-run mode, increments wouldFix (not fixed) and does not rename files", async () => {
     createTestFiles({
       "Show.S01E01.Pilot.mkv": "",
       "Show.S01E02.Episode.Two.mkv": ""
@@ -70,6 +70,8 @@ describe("deepScan", () => {
 
     const result = await deepScan(TEST_ROOT, true, true);
     // Dry run should not actually rename anything
+    expect(result.fixed).toBe(0);
+    expect(result.wouldFix).toBeGreaterThanOrEqual(0);
     expect(result.errors).toBeDefined();
   });
 });

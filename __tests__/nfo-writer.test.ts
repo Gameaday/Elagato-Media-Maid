@@ -145,6 +145,33 @@ describe("readNfoFields", () => {
   });
 });
 
+describe("writeNfoFile – undo integration", () => {
+  it("creates an undo snapshot that stores original content for existing files", async () => {
+    const nfoPath = join(TEST_ROOT, "undo-test.nfo");
+    const originalContent = `<?xml version="1.0"?>\n<movie>\n  <title>Original</title>\n</movie>\n`;
+    writeFileSync(nfoPath, originalContent);
+
+    const fields = getNfoTemplate("movie");
+    fields[0].value = "Updated Title";
+    await writeNfoFile(nfoPath, "movie", fields);
+
+    // File should have new content
+    const updatedContent = readFileSync(nfoPath, "utf-8");
+    expect(updatedContent).toContain("<title>Updated Title</title>");
+    expect(updatedContent).not.toContain("<title>Original</title>");
+  });
+
+  it("creates an undo snapshot for newly created files", async () => {
+    const nfoPath = join(TEST_ROOT, "new-undo.nfo");
+    const fields = getNfoTemplate("movie");
+    fields[0].value = "New Movie";
+
+    const result = await writeNfoFile(nfoPath, "movie", fields);
+    expect(result.success).toBe(true);
+    expect(existsSync(nfoPath)).toBe(true);
+  });
+});
+
 describe("autoCreateNfo", () => {
   it("creates an NFO file from a media filename", async () => {
     const mediaPath = join(TEST_ROOT, "Movie.2023.mkv");

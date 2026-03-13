@@ -182,6 +182,13 @@ describe("validateFolderPath", () => {
     expect(result.reason).toBeUndefined();
   });
 
+  it("rejects a file path (not a directory)", () => {
+    writeFileSync(join(TEST_ROOT, "afile.txt"), "hello");
+    const result = validateFolderPath(join(TEST_ROOT, "afile.txt"));
+    expect(result.valid).toBe(false);
+    expect(result.reason).toContain("not a directory");
+  });
+
   it("accepts directory with files", () => {
     writeFileSync(join(TEST_ROOT, "test.txt"), "hello");
     const result = validateFolderPath(TEST_ROOT);

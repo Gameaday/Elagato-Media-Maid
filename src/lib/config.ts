@@ -155,7 +155,7 @@ export const TV_EPISODE_RE =
 
 // ── Filesystem helpers ─────────────────────────────────────────────
 
-import { existsSync, accessSync, constants as fsConstants } from "fs";
+import { existsSync, accessSync, statSync, constants as fsConstants } from "fs";
 
 export interface PathValidation {
   valid: boolean;
@@ -173,6 +173,15 @@ export function validateFolderPath(folderPath: string): PathValidation {
 
   if (!existsSync(folderPath)) {
     return { valid: false, reason: `Path does not exist: ${folderPath}` };
+  }
+
+  try {
+    const stat = statSync(folderPath);
+    if (!stat.isDirectory()) {
+      return { valid: false, reason: `Path is not a directory: ${folderPath}` };
+    }
+  } catch {
+    return { valid: false, reason: `Cannot stat path: ${folderPath}` };
   }
 
   try {

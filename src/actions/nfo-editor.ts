@@ -12,7 +12,7 @@
  * Encoder (Stream Deck+):
  *   Rotate       → browse NFO fields
  *   Push         → save current NFO
- *   Touch        → quick-edit current field
+ *   Touch        → view current field details
  */
 
 import streamDeck, {
@@ -107,7 +107,7 @@ export class NfoEditorAction extends SingletonAction<NfoEditorSettings> {
       "title": `NFO Field ${next + 1}/${fields.length}`,
       "field-name": field.label,
       "field-value": field.value || "(empty)",
-      "status-text": field.editable ? "Tap to edit" : "Read only"
+      "status-text": field.editable ? "Editable" : "Read only"
     });
   }
 
@@ -116,7 +116,7 @@ export class NfoEditorAction extends SingletonAction<NfoEditorSettings> {
   }
 
   override async onTouchTap(ev: TouchTapEvent<NfoEditorSettings>): Promise<void> {
-    // Touch shows current field details
+    // Touch displays expanded field details (read-only view)
     const context = ev.action.id;
     const fields = this.currentFields.get(context);
     const idx = this.fieldIndex.get(context) ?? 0;

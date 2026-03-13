@@ -37,8 +37,10 @@ export interface DeepScanResult {
   filesExamined: number;
   /** Issues found */
   issues: ScanIssue[];
-  /** Number of issues auto-fixed */
+  /** Number of issues actually auto-fixed (only incremented for real renames) */
   fixed: number;
+  /** Number of issues that would be fixed in dry-run mode */
+  wouldFix: number;
   /** Errors encountered */
   errors: Record<string, string>;
   /** Health score 0–100 (percentage of correctly named files) */
@@ -125,6 +127,7 @@ export async function deepScan(
     filesExamined: 0,
     issues: [],
     fixed: 0,
+    wouldFix: 0,
     errors: {},
     healthScore: 100
   };
@@ -175,13 +178,15 @@ export async function deepScan(
 
     for (const issue of result.issues) {
       if (dryRun) {
+        const dir = dirname(issue.filePath);
+        const newPath = join(dir, issue.suggestedName);
         logOperation({
           operation: "dryrun",
           from: issue.filePath,
-          to: issue.suggestedName,
+          to: newPath,
           message: `DRY RUN – would fix: ${issue.description}`
         });
-        result.fixed++;
+        result.wouldFix++;
       } else {
         try {
           const dir = dirname(issue.filePath);

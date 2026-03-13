@@ -7,19 +7,21 @@
  * The stack is also persisted to disk so it survives plugin restarts.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import { rename, rm } from "fs/promises";
+import { rename, rm, writeFile } from "fs/promises";
 import { MAX_UNDO_SNAPSHOTS } from "./config.js";
 
 export interface FileOperation {
   /** Operation type */
-  type: "rename" | "move" | "mkdir";
+  type: "rename" | "move" | "mkdir" | "nfo-write";
   /** Original path of the file/folder */
   from: string;
   /** Destination path of the file/folder */
   to: string;
+  /** For nfo-write operations: the original file content to restore on undo */
+  previousContent?: string;
 }
 
 export interface UndoSnapshot {
@@ -102,6 +104,18 @@ export async function applyUndo(snapshot: UndoSnapshot): Promise<string[]> {
           await rm(op.to, { recursive: false });
         } catch {
           // Directory not empty or doesn't exist – skip silently
+        }
+      } else if (op.type === "nfo-write") {
+        // Restore original NFO content, or delete if it was newly created
+        if (op.previousContent !== undefined) {
+          await writeFile(op.to, op.previousContent, "utf-8");
+        } else {
+          // File didn't exist before – remove it
+          try {
+            unlinkSync(op.to);
+          } catch {
+            // File already gone – skip silently
+          }
         }
       } else {
         // rename and move are both reversed by renaming back

@@ -180,18 +180,16 @@ export async function writeNfoFile(
     await writeFile(nfoPath, content, "utf-8");
 
     logOperation({
-      operation: existed ? "rename" : "mkdir",
+      operation: existed ? "write" : "write",
       to: nfoPath,
       message: `${existed ? "Updated" : "Created"} NFO: ${basename(nfoPath)}`
     });
 
-    // Create undo snapshot for NFO changes
-    if (existed && originalContent !== undefined) {
-      pushUndoSnapshot(createSnapshot(
-        `NFO Edit – ${basename(nfoPath)}`,
-        [{ type: "rename", from: nfoPath, to: nfoPath }]
-      ));
-    }
+    // Create undo snapshot for NFO changes – stores original content for proper restore
+    pushUndoSnapshot(createSnapshot(
+      `NFO ${existed ? "Edit" : "Create"} – ${basename(nfoPath)}`,
+      [{ type: "nfo-write", from: "", to: nfoPath, previousContent: originalContent }]
+    ));
 
     return { success: true, message: `${existed ? "Updated" : "Created"} ${basename(nfoPath)}` };
   } catch (err) {

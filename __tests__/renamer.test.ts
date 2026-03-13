@@ -227,6 +227,19 @@ describe("parseMusicPattern", () => {
     expect(meta.songTitle).toBeUndefined();
     expect(meta.trackNumber).toBeUndefined();
   });
+
+  it("parses track# followed by song title (no artist)", () => {
+    const meta = parseMusicPattern("01 Song Title");
+    expect(meta.trackNumber).toBe(1);
+    expect(meta.songTitle).toBe("Song Title");
+    expect(meta.artist).toBeUndefined();
+  });
+
+  it("parses track# with dot separator and song title (no artist)", () => {
+    const meta = parseMusicPattern("05.My_Song_Title");
+    expect(meta.trackNumber).toBe(5);
+    expect(meta.songTitle).toBe("My Song Title");
+  });
 });
 
 // ---------------------------------------------------------------------------

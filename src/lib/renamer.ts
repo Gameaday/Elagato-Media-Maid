@@ -9,6 +9,7 @@ import { readdirSync, statSync, existsSync } from "fs";
 import { rename, mkdir } from "fs/promises";
 import { join, extname, basename } from "path";
 import type { NamingPattern, FileMetadata } from "./patterns.js";
+import { MediaType } from "./patterns.js";
 import { findAndParseNfo } from "./nfo-parser.js";
 import { logOperation } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
@@ -110,6 +111,14 @@ export function parseMusicPattern(baseName: string): Partial<FileMetadata> {
     return meta;
   }
 
+  // Track# followed by song title (no artist separator), e.g. "01 Song Title"
+  const trackOnly = /^(\d{1,3})[.\s_]+(.+)$/.exec(baseName);
+  if (trackOnly) {
+    meta.trackNumber = parseInt(trackOnly[1], 10);
+    meta.songTitle = trackOnly[2].replace(/[._]/g, " ").trim();
+    return meta;
+  }
+
   return meta;
 }
 
@@ -124,7 +133,7 @@ export function parseYearFromFilename(baseName: string): number | undefined {
 /**
  * Build FileMetadata from a filename and any NFO data.
  * NFO data takes precedence over filename parsing.
- * Uses the appropriate parser based on the target pattern type.
+ * Selects the appropriate parser based on the target pattern's media type.
  */
 async function buildMetadata(
   filePath: string,
@@ -136,19 +145,26 @@ async function buildMetadata(
 
   const nfoMeta = await findAndParseNfo(filePath);
 
-  // Choose parser based on pattern type
-  const fromTv = parseTvPattern(baseName);
-  const fromMusic = parseMusicPattern(baseName);
+  // Select parser based on the pattern's media type
+  const isMusicPattern = pattern.mediaType === MediaType.MUSIC;
+  const isTvPattern = pattern.mediaType === MediaType.JELLYFIN_TV;
+
+  const fromTv = isTvPattern ? parseTvPattern(baseName) : {};
+  const fromMusic = isMusicPattern ? parseMusicPattern(baseName) : {};
+
+  // For movie/photo/book/doc patterns, try TV parsing only for
+  // season/episode extraction (useful for metadata) when not music
+  const fromTvFallback = !isMusicPattern && !isTvPattern ? parseTvPattern(baseName) : {};
 
   // Merge: NFO takes precedence, then pattern-appropriate parser
   const merged: FileMetadata = {
     baseName,
     ext,
     originalPath: filePath,
-    title: nfoMeta.title ?? fromTv.title ?? baseName,
-    season: nfoMeta.season ?? fromTv.season,
-    episode: nfoMeta.episode ?? fromTv.episode,
-    episodeTitle: nfoMeta.episodeTitle ?? fromTv.episodeTitle,
+    title: nfoMeta.title ?? fromTv.title ?? fromTvFallback.title ?? baseName,
+    season: nfoMeta.season ?? fromTv.season ?? fromTvFallback.season,
+    episode: nfoMeta.episode ?? fromTv.episode ?? fromTvFallback.episode,
+    episodeTitle: nfoMeta.episodeTitle ?? fromTv.episodeTitle ?? fromTvFallback.episodeTitle,
     year: nfoMeta.year ?? parseYearFromFilename(baseName),
     artist: nfoMeta.artist ?? fromMusic.artist,
     album: nfoMeta.album,

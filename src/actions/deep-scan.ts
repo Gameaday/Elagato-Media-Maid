@@ -188,7 +188,7 @@ export class DeepScanAction extends SingletonAction<DeepScanSettings> {
 
       streamDeck.logger.info(
         `DeepScan: ${result.directoriesScanned} dirs, ${result.filesExamined} files, ` +
-        `${result.issues.length} issues, ${result.fixed} fixed, health ${result.healthScore}%`
+        `${result.issues.length} issues, ${result.fixed} fixed, ${result.wouldFix} would fix, health ${result.healthScore}%`
       );
 
       // Update title with health score
@@ -201,7 +201,7 @@ export class DeepScanAction extends SingletonAction<DeepScanSettings> {
           "title": `Health: ${result.healthScore}%`,
           "scan-info": `${result.issues.length} issue(s) found`,
           "scan-bar": { value: result.healthScore },
-          "status-text": fix ? `Fixed ${result.fixed}` : `${result.filesExamined} files scanned`
+          "status-text": fix ? `Fixed ${result.fixed}` : `Would fix ${result.wouldFix}`
         });
       }
 
