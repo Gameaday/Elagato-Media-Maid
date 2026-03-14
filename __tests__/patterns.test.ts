@@ -13,6 +13,9 @@ import {
   genericDocsPattern,
   getPattern,
   ALL_PATTERNS,
+  applyTemplate,
+  createCustomPattern,
+  DEFAULT_CUSTOM_TEMPLATE,
   type FileMetadata
 } from "../src/lib/patterns";
 
@@ -208,5 +211,126 @@ describe("ALL_PATTERNS", () => {
     for (const pattern of ALL_PATTERNS) {
       expect(pattern.extensions.length).toBeGreaterThan(0);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Custom Template Pattern
+// ---------------------------------------------------------------------------
+
+describe("applyTemplate", () => {
+  it("replaces TV tokens", () => {
+    const result = applyTemplate("{title} - S{season}E{episode} - {episodeTitle}{ext}", baseMetaTv);
+    expect(result).toBe("Breaking Bad - S01E01 - Pilot.mkv");
+  });
+
+  it("replaces music tokens", () => {
+    const meta: FileMetadata = {
+      baseName: "track",
+      ext: ".flac",
+      originalPath: "/music/track.flac",
+      trackNumber: 3,
+      artist: "Pink Floyd",
+      songTitle: "Comfortably Numb"
+    };
+    const result = applyTemplate("{track} - {artist} - {song}{ext}", meta);
+    expect(result).toBe("03 - Pink Floyd - Comfortably Numb.flac");
+  });
+
+  it("replaces photo tokens", () => {
+    const meta: FileMetadata = {
+      baseName: "IMG_001",
+      ext: ".jpg",
+      originalPath: "/photos/IMG_001.jpg",
+      dateTaken: "2024-06-15",
+      location: "Paris",
+      index: 5
+    };
+    const result = applyTemplate("{date}_{location}_{index}{ext}", meta);
+    expect(result).toBe("2024-06-15_Paris_005.jpg");
+  });
+
+  it("leaves unknown tokens unchanged", () => {
+    const result = applyTemplate("{unknownToken}{ext}", baseMetaTv);
+    expect(result).toBe("{unknownToken}.mkv");
+  });
+
+  it("uses baseName when title is missing", () => {
+    const meta: FileMetadata = {
+      baseName: "my file",
+      ext: ".txt",
+      originalPath: "/docs/my file.txt"
+    };
+    const result = applyTemplate("{title}{ext}", meta);
+    expect(result).toBe("my file.txt");
+  });
+
+  it("produces empty string for missing optional tokens", () => {
+    const meta: FileMetadata = {
+      baseName: "file",
+      ext: ".mkv",
+      originalPath: "/media/file.mkv",
+      title: "Show"
+    };
+    const result = applyTemplate("{title} - S{season}E{episode}{ext}", meta);
+    expect(result).toBe("Show - SE.mkv");
+  });
+
+  it("replaces year token", () => {
+    const meta: FileMetadata = {
+      baseName: "Inception",
+      ext: ".mkv",
+      originalPath: "/movies/Inception.mkv",
+      title: "Inception",
+      year: 2010
+    };
+    const result = applyTemplate("{title} ({year}){ext}", meta);
+    expect(result).toBe("Inception (2010).mkv");
+  });
+
+  it("uses baseName token", () => {
+    const meta: FileMetadata = {
+      baseName: "original_filename",
+      ext: ".pdf",
+      originalPath: "/docs/original_filename.pdf"
+    };
+    const result = applyTemplate("{baseName}{ext}", meta);
+    expect(result).toBe("original_filename.pdf");
+  });
+});
+
+describe("createCustomPattern", () => {
+  it("creates a pattern with the CUSTOM media type", () => {
+    const pattern = createCustomPattern("{title}{ext}");
+    expect(pattern.mediaType).toBe(MediaType.CUSTOM);
+    expect(pattern.label).toBe("Custom Template");
+  });
+
+  it("formats using the provided template", () => {
+    const pattern = createCustomPattern("{title} - S{season}E{episode}{ext}");
+    const result = pattern.format(baseMetaTv);
+    expect(result).toBe("Breaking Bad - S01E01.mkv");
+  });
+
+  it("has extensions covering all media types", () => {
+    const pattern = createCustomPattern("{title}{ext}");
+    expect(pattern.extensions).toContain(".mkv");
+    expect(pattern.extensions).toContain(".jpg");
+    expect(pattern.extensions).toContain(".flac");
+    expect(pattern.extensions).toContain(".epub");
+    expect(pattern.extensions).toContain(".pdf");
+  });
+
+  it("does not have duplicate extensions", () => {
+    const pattern = createCustomPattern("{title}{ext}");
+    const unique = new Set(pattern.extensions);
+    expect(unique.size).toBe(pattern.extensions.length);
+  });
+});
+
+describe("DEFAULT_CUSTOM_TEMPLATE", () => {
+  it("is a valid template string with tokens", () => {
+    expect(DEFAULT_CUSTOM_TEMPLATE).toContain("{title}");
+    expect(DEFAULT_CUSTOM_TEMPLATE).toContain("{ext}");
   });
 });

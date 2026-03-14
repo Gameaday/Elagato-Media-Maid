@@ -30,7 +30,7 @@ import streamDeck, {
 } from "@elgato/streamdeck";
 import type { JsonValue } from "@elgato/utils";
 
-import { MediaType, getPattern, ALL_PATTERNS } from "../lib/patterns.js";
+import { MediaType, getPattern, ALL_PATTERNS, createCustomPattern, DEFAULT_CUSTOM_TEMPLATE } from "../lib/patterns.js";
 import { renameFolder, organizeWithFolderStructure } from "../lib/renamer.js";
 import { getLogFilePath } from "../lib/logger.js";
 import { LONG_PRESS_MS } from "../lib/config.js";
@@ -43,6 +43,8 @@ export interface QuickRenameSettings {
   mediaType: MediaType;
   /** Whether to also create folder structure (e.g., Season folders) */
   createFolderStructure: boolean;
+  /** Custom format template string (used when mediaType is "custom") */
+  customFormat: string;
 }
 
 const PATTERN_CYCLE = ALL_PATTERNS.map(p => p.mediaType);
@@ -136,7 +138,9 @@ export class QuickRenameAction extends SingletonAction<QuickRenameSettings> {
     actionObj: Action<QuickRenameSettings>,
     settings: QuickRenameSettings
   ): Promise<void> {
-    const pattern = getPattern(settings.mediaType);
+    const pattern = settings.mediaType === MediaType.CUSTOM
+      ? createCustomPattern(settings.customFormat || DEFAULT_CUSTOM_TEMPLATE)
+      : getPattern(settings.mediaType);
     const label = pattern?.label.split("–")[1]?.trim() ?? "Quick Rename";
     if (actionObj.isKey() || actionObj.isDial()) {
       await actionObj.setTitle(label);
@@ -164,7 +168,9 @@ export class QuickRenameAction extends SingletonAction<QuickRenameSettings> {
       return;
     }
 
-    const pattern = getPattern(settings.mediaType);
+    const pattern = settings.mediaType === MediaType.CUSTOM
+      ? createCustomPattern(settings.customFormat || DEFAULT_CUSTOM_TEMPLATE)
+      : getPattern(settings.mediaType);
     if (!pattern) {
       await actionObj.showAlert();
       streamDeck.logger.error(`QuickRename: unknown media type "${settings.mediaType}"`);

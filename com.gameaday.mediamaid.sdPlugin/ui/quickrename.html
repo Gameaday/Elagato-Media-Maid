@@ -24,7 +24,14 @@
         <option value="music">Music – Track# Artist Song</option>
         <option value="books">Books / eBooks – Author Title</option>
         <option value="generic_docs">Documents – Date Prefixed</option>
+        <option value="custom">Custom Template</option>
       </select>
+    </div>
+
+    <div class="sdpi-item" id="customFormatGroup" style="display:none">
+      <label class="sdpi-item-label" for="customFormat">Format Template</label>
+      <input type="text" id="customFormat" placeholder="{title} - S{season}E{episode}{ext}">
+      <div class="sdpi-info">Tokens: {title}, {season}, {episode}, {episodeTitle}, {year}, {artist}, {track}, {song}, {date}, {location}, {index}, {ext}, {baseName}</div>
     </div>
 
     <div class="sdpi-item">
@@ -57,23 +64,32 @@
       photography:    "2024-06-15_Paris_001.jpg",
       music:          "01 - Artist Name - Song Title.flac",
       books:          "Author Name - Book Title.epub",
-      generic_docs:   "2024-06-15_Original Filename.pdf"
+      generic_docs:   "2024-06-15_Original Filename.pdf",
+      custom:         ""
     };
 
     const HAS_FOLDER = {
       jellyfin_tv: true, jellyfin_movie: true, photography: false,
-      music: true, books: true, generic_docs: false
+      music: true, books: true, generic_docs: false, custom: false
     };
 
-    const folderPathEl = document.getElementById("folderPath");
-    const mediaTypeEl  = document.getElementById("mediaType");
-    const createFSEl   = document.getElementById("createFolderStructure");
-    const previewEl    = document.getElementById("formatPreview");
-    const pathStatusEl = document.getElementById("pathStatus");
+    const folderPathEl    = document.getElementById("folderPath");
+    const mediaTypeEl     = document.getElementById("mediaType");
+    const createFSEl      = document.getElementById("createFolderStructure");
+    const previewEl       = document.getElementById("formatPreview");
+    const pathStatusEl    = document.getElementById("pathStatus");
+    const customFormatEl  = document.getElementById("customFormat");
+    const customGroupEl   = document.getElementById("customFormatGroup");
 
     function updatePreview() {
       const type = mediaTypeEl.value;
-      previewEl.textContent = PREVIEWS[type] || "";
+      const isCustom = type === "custom";
+      customGroupEl.style.display = isCustom ? "" : "none";
+      if (isCustom) {
+        previewEl.textContent = customFormatEl.value || "{title} - S{season}E{episode}{ext}";
+      } else {
+        previewEl.textContent = PREVIEWS[type] || "";
+      }
       createFSEl.disabled = !HAS_FOLDER[type];
     }
 
@@ -95,6 +111,7 @@
       if (settings.folderPath !== undefined) folderPathEl.value = settings.folderPath;
       if (settings.mediaType  !== undefined) mediaTypeEl.value  = settings.mediaType;
       if (settings.createFolderStructure !== undefined) createFSEl.checked = settings.createFolderStructure;
+      if (settings.customFormat !== undefined) customFormatEl.value = settings.customFormat;
       updatePreview();
       validatePath();
     }
@@ -105,7 +122,8 @@
         payload: {
           folderPath:            folderPathEl.value.trim(),
           mediaType:             mediaTypeEl.value,
-          createFolderStructure: createFSEl.checked
+          createFolderStructure: createFSEl.checked,
+          customFormat:          customFormatEl.value.trim()
         }
       });
     }
@@ -138,6 +156,7 @@
       folderPathEl.addEventListener("input", () => { validatePath(); saveSettings(); });
       mediaTypeEl.addEventListener("change", () => { updatePreview(); saveSettings(); });
       createFSEl.addEventListener("change", saveSettings);
+      customFormatEl.addEventListener("input", () => { updatePreview(); saveSettings(); });
     }
 
     mediaTypeEl.addEventListener("change", updatePreview);

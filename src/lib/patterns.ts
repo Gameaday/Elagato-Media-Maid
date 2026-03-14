@@ -21,6 +21,7 @@ export enum MediaType {
   MUSIC = "music",
   BOOKS = "books",
   GENERIC_DOCS = "generic_docs",
+  CUSTOM = "custom",
   UNKNOWN = "unknown"
 }
 
@@ -214,4 +215,63 @@ export const ALL_PATTERNS: NamingPattern[] = [
 /** Look up a pattern by MediaType */
 export function getPattern(mediaType: MediaType): NamingPattern | undefined {
   return ALL_PATTERNS.find(p => p.mediaType === mediaType);
+}
+
+// ---------------------------------------------------------------------------
+// Custom Template Pattern
+// Tokens: {title}, {season}, {episode}, {episodeTitle}, {year}, {artist},
+//         {track}, {song}, {date}, {location}, {index}, {ext}, {baseName}
+// ---------------------------------------------------------------------------
+
+/**
+ * Replace template tokens with values from metadata.
+ * Unknown tokens are left as-is. Empty optional values produce "".
+ */
+export function applyTemplate(template: string, meta: FileMetadata): string {
+  return template.replace(/\{(\w+)\}/g, (_match, token: string) => {
+    switch (token) {
+      case "title":        return sanitizeFilename(meta.title ?? meta.baseName);
+      case "season":       return meta.season !== undefined ? pad(meta.season) : "";
+      case "episode":      return meta.episode !== undefined ? pad(meta.episode) : "";
+      case "episodeTitle": return meta.episodeTitle ? sanitizeFilename(meta.episodeTitle) : "";
+      case "year":         return meta.year !== undefined ? String(meta.year) : "";
+      case "artist":       return meta.artist ? sanitizeFilename(meta.artist) : "";
+      case "track":        return meta.trackNumber !== undefined ? pad(meta.trackNumber) : "";
+      case "song":         return meta.songTitle ? sanitizeFilename(meta.songTitle) : "";
+      case "date":         return meta.dateTaken ?? new Date().toISOString().slice(0, 10);
+      case "location":     return meta.location ? sanitizeFilename(meta.location) : "";
+      case "index":        return meta.index !== undefined ? pad(meta.index, 3) : "";
+      case "ext":          return meta.ext;
+      case "baseName":     return sanitizeFilename(meta.baseName);
+      default:             return `{${token}}`;
+    }
+  });
+}
+
+/** Default custom format template */
+export const DEFAULT_CUSTOM_TEMPLATE = "{title} - S{season}E{episode}{ext}";
+
+/**
+ * Create a NamingPattern from a user-defined template string.
+ * Accepts all common media file extensions so it works with any content type.
+ */
+export function createCustomPattern(template: string): NamingPattern {
+  const allExtensions = [
+    ...TV_VIDEO_EXTENSIONS,
+    ...PHOTO_EXTENSIONS,
+    ...MUSIC_EXTENSIONS,
+    ...BOOK_EXTENSIONS,
+    ...DOC_EXTENSIONS
+  ];
+  // Deduplicate
+  const extensions = [...new Set(allExtensions)];
+
+  return {
+    mediaType: MediaType.CUSTOM,
+    label: "Custom Template",
+    extensions,
+    format(meta) {
+      return applyTemplate(template, meta);
+    }
+  };
 }
