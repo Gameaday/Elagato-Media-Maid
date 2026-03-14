@@ -250,6 +250,16 @@ describe("applyTemplate", () => {
     expect(result).toBe("2024-06-15_Paris_005.jpg");
   });
 
+  it("returns empty string for missing date token", () => {
+    const meta: FileMetadata = {
+      baseName: "file",
+      ext: ".jpg",
+      originalPath: "/photos/file.jpg"
+    };
+    const result = applyTemplate("{date}{ext}", meta);
+    expect(result).toBe(".jpg");
+  });
+
   it("leaves unknown tokens unchanged", () => {
     const result = applyTemplate("{unknownToken}{ext}", baseMetaTv);
     expect(result).toBe("{unknownToken}.mkv");

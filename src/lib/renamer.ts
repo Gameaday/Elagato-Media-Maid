@@ -199,10 +199,11 @@ async function deconflict(proposedPath: string, existingFiles: Set<string>): Pro
   const base = proposedPath.slice(0, -ext.length);
   let counter = 2;
   let candidate: string;
-  do {
+  for (;;) {
     candidate = `${base} (${counter})${ext}`;
+    if (!existingFiles.has(candidate) && !(await pathExists(candidate))) break;
     counter++;
-  } while (existingFiles.has(candidate) || await pathExists(candidate));
+  }
   return candidate;
 }
 

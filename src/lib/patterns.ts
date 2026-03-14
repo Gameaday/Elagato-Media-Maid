@@ -238,7 +238,7 @@ export function applyTemplate(template: string, meta: FileMetadata): string {
       case "artist":       return meta.artist ? sanitizeFilename(meta.artist) : "";
       case "track":        return meta.trackNumber !== undefined ? pad(meta.trackNumber) : "";
       case "song":         return meta.songTitle ? sanitizeFilename(meta.songTitle) : "";
-      case "date":         return meta.dateTaken ?? new Date().toISOString().slice(0, 10);
+      case "date":         return meta.dateTaken ?? "";
       case "location":     return meta.location ? sanitizeFilename(meta.location) : "";
       case "index":        return meta.index !== undefined ? pad(meta.index, 3) : "";
       case "ext":          return meta.ext;
