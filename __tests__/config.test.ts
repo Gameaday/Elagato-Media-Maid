@@ -13,6 +13,9 @@ import {
   CODE_EXTS,
   NFO_EXTS,
   SUBTITLE_EXTS,
+  ROM_EXTS,
+  ROM_EXTENSIONS,
+  PLATFORM_MAP,
   SORT_CATEGORIES,
   CATEGORY_MAP,
   TV_VIDEO_EXTENSIONS,
@@ -21,6 +24,8 @@ import {
   BOOK_EXTENSIONS,
   DOC_EXTENSIONS,
   TV_EPISODE_RE,
+  ROM_TAG_RE,
+  ROM_REGION_RE,
   LONG_PRESS_MS,
   MAX_UNDO_SNAPSHOTS,
   DEFAULT_MAX_DEPTH,
@@ -50,7 +55,7 @@ describe("extension sets", () => {
     // excluded because they are ancillary categories that intentionally
     // overlap with some primary types (e.g. .pdf in both EBOOK and DOCUMENT
     // is handled by organizer sort priority, not set disjointness).
-    const sets = [VIDEO_EXTS, PHOTO_EXTS, AUDIO_EXTS, EBOOK_EXTS, DOCUMENT_EXTS];
+    const sets = [VIDEO_EXTS, PHOTO_EXTS, AUDIO_EXTS, EBOOK_EXTS, DOCUMENT_EXTS, ROM_EXTS];
     for (let i = 0; i < sets.length; i++) {
       for (let j = i + 1; j < sets.length; j++) {
         const overlap = [...sets[i]].filter(e => sets[j].has(e));
@@ -70,11 +75,12 @@ describe("extension sets", () => {
     expect(CODE_EXTS.size).toBeGreaterThan(0);
     expect(NFO_EXTS.size).toBeGreaterThan(0);
     expect(SUBTITLE_EXTS.size).toBeGreaterThan(0);
+    expect(ROM_EXTS.size).toBeGreaterThan(0);
   });
 
   it("all extensions start with a dot", () => {
     const allSets = [VIDEO_EXTS, PHOTO_EXTS, AUDIO_EXTS, EBOOK_EXTS, DOCUMENT_EXTS,
-      INSTALLER_EXTS, ARCHIVE_EXTS, CODE_EXTS, NFO_EXTS, SUBTITLE_EXTS];
+      INSTALLER_EXTS, ARCHIVE_EXTS, CODE_EXTS, NFO_EXTS, SUBTITLE_EXTS, ROM_EXTS];
     for (const set of allSets) {
       for (const ext of set) {
         expect(ext.startsWith(".")).toBe(true);
@@ -97,6 +103,9 @@ describe("extension sets", () => {
     }
     for (const ext of DOC_EXTENSIONS) {
       expect(DOCUMENT_EXTS.has(ext)).toBe(true);
+    }
+    for (const ext of ROM_EXTENSIONS) {
+      expect(ROM_EXTS.has(ext)).toBe(true);
     }
   });
 });
@@ -193,5 +202,66 @@ describe("validateFolderPath", () => {
     writeFileSync(join(TEST_ROOT, "test.txt"), "hello");
     const result = validateFolderPath(TEST_ROOT);
     expect(result.valid).toBe(true);
+  });
+});
+
+describe("ROM_EXTS", () => {
+  it("contains common ROM extensions", () => {
+    expect(ROM_EXTS.has(".nes")).toBe(true);
+    expect(ROM_EXTS.has(".sfc")).toBe(true);
+    expect(ROM_EXTS.has(".gba")).toBe(true);
+    expect(ROM_EXTS.has(".n64")).toBe(true);
+    expect(ROM_EXTS.has(".gen")).toBe(true);
+    expect(ROM_EXTS.has(".nds")).toBe(true);
+  });
+});
+
+describe("PLATFORM_MAP", () => {
+  it("covers all extensions in ROM_EXTS", () => {
+    for (const ext of ROM_EXTS) {
+      expect(PLATFORM_MAP[ext]).toBeDefined();
+    }
+  });
+
+  it("maps .nes to NES", () => {
+    expect(PLATFORM_MAP[".nes"]).toBe("NES");
+  });
+
+  it("maps .gba to Game Boy Advance", () => {
+    expect(PLATFORM_MAP[".gba"]).toBe("Game Boy Advance");
+  });
+});
+
+describe("ROM_TAG_RE", () => {
+  it("strips scene tags from ROM filenames", () => {
+    const cleaned = "Super Mario [!] [h1]".replace(ROM_TAG_RE, "");
+    expect(cleaned).toBe("Super Mario");
+  });
+
+  it("does not strip non-tag brackets", () => {
+    const cleaned = "Game Title".replace(ROM_TAG_RE, "");
+    expect(cleaned).toBe("Game Title");
+  });
+});
+
+describe("ROM_REGION_RE", () => {
+  it("extracts region from parenthesised tag", () => {
+    const match = ROM_REGION_RE.exec("Game (USA)");
+    expect(match).not.toBeNull();
+    expect(match![1]).toBe("USA");
+  });
+
+  it("extracts first region from multiple tags", () => {
+    const match = ROM_REGION_RE.exec("Game (Japan, USA) (Rev A)");
+    expect(match).not.toBeNull();
+    expect(match![1]).toBe("Japan, USA");
+  });
+});
+
+describe("SORT_CATEGORIES – ROMs", () => {
+  it("includes a ROMs category", () => {
+    const romCat = SORT_CATEGORIES.find(c => c.folder === "ROMs");
+    expect(romCat).toBeDefined();
+    expect(romCat!.extensions).toBe(ROM_EXTS);
   });
 });

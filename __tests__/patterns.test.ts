@@ -11,6 +11,7 @@ import {
   musicPattern,
   booksPattern,
   genericDocsPattern,
+  emulationRomsPattern,
   getPattern,
   ALL_PATTERNS,
   applyTemplate,
@@ -195,6 +196,7 @@ describe("getPattern", () => {
     expect(getPattern(MediaType.MUSIC)).toBe(musicPattern);
     expect(getPattern(MediaType.BOOKS)).toBe(booksPattern);
     expect(getPattern(MediaType.GENERIC_DOCS)).toBe(genericDocsPattern);
+    expect(getPattern(MediaType.EMULATION_ROMS)).toBe(emulationRomsPattern);
   });
 
   it("returns undefined for UNKNOWN", () => {
@@ -203,8 +205,8 @@ describe("getPattern", () => {
 });
 
 describe("ALL_PATTERNS", () => {
-  it("contains exactly 6 patterns", () => {
-    expect(ALL_PATTERNS).toHaveLength(6);
+  it("contains exactly 7 patterns", () => {
+    expect(ALL_PATTERNS).toHaveLength(7);
   });
 
   it("all patterns have non-empty extension lists", () => {
@@ -342,5 +344,148 @@ describe("DEFAULT_CUSTOM_TEMPLATE", () => {
   it("is a valid template string with tokens", () => {
     expect(DEFAULT_CUSTOM_TEMPLATE).toContain("{title}");
     expect(DEFAULT_CUSTOM_TEMPLATE).toContain("{ext}");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Emulation ROMs Pattern
+// ---------------------------------------------------------------------------
+
+describe("emulationRomsPattern", () => {
+  it("formats with title and region", () => {
+    const meta: FileMetadata = {
+      baseName: "Super Mario Bros",
+      ext: ".nes",
+      originalPath: "/roms/Super Mario Bros.nes",
+      title: "Super Mario Bros",
+      region: "USA"
+    };
+    expect(emulationRomsPattern.format(meta)).toBe("Super Mario Bros (USA).nes");
+  });
+
+  it("formats without region when not provided", () => {
+    const meta: FileMetadata = {
+      baseName: "Sonic",
+      ext: ".gen",
+      originalPath: "/roms/Sonic.gen",
+      title: "Sonic"
+    };
+    expect(emulationRomsPattern.format(meta)).toBe("Sonic.gen");
+  });
+
+  it("falls back to baseName when title is missing", () => {
+    const meta: FileMetadata = {
+      baseName: "unknown_rom",
+      ext: ".sfc",
+      originalPath: "/roms/unknown_rom.sfc"
+    };
+    expect(emulationRomsPattern.format(meta)).toBe("unknown_rom.sfc");
+  });
+
+  it("generates platform folder path from extension", () => {
+    const meta: FileMetadata = {
+      baseName: "game",
+      ext: ".nes",
+      originalPath: "/roms/game.nes"
+    };
+    expect(emulationRomsPattern.folderPath!(meta)).toBe("NES");
+  });
+
+  it("generates SNES folder for .sfc extension", () => {
+    const meta: FileMetadata = {
+      baseName: "game",
+      ext: ".sfc",
+      originalPath: "/roms/game.sfc"
+    };
+    expect(emulationRomsPattern.folderPath!(meta)).toBe("SNES");
+  });
+
+  it("generates Game Boy Advance folder for .gba extension", () => {
+    const meta: FileMetadata = {
+      baseName: "game",
+      ext: ".gba",
+      originalPath: "/roms/game.gba"
+    };
+    expect(emulationRomsPattern.folderPath!(meta)).toBe("Game Boy Advance");
+  });
+
+  it("uses platform from metadata when available", () => {
+    const meta: FileMetadata = {
+      baseName: "game",
+      ext: ".chd",
+      originalPath: "/roms/game.chd",
+      platform: "PlayStation"
+    };
+    expect(emulationRomsPattern.folderPath!(meta)).toBe("PlayStation");
+  });
+
+  it("falls back to Other for unknown extension", () => {
+    const meta: FileMetadata = {
+      baseName: "game",
+      ext: ".xyz",
+      originalPath: "/roms/game.xyz"
+    };
+    expect(emulationRomsPattern.folderPath!(meta)).toBe("Other");
+  });
+
+  it("has ROM-specific extensions", () => {
+    expect(emulationRomsPattern.extensions).toContain(".nes");
+    expect(emulationRomsPattern.extensions).toContain(".sfc");
+    expect(emulationRomsPattern.extensions).toContain(".gba");
+    expect(emulationRomsPattern.extensions).toContain(".n64");
+    expect(emulationRomsPattern.extensions).toContain(".gen");
+  });
+
+  it("has mediaType EMULATION_ROMS", () => {
+    expect(emulationRomsPattern.mediaType).toBe(MediaType.EMULATION_ROMS);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyTemplate – platform and region tokens
+// ---------------------------------------------------------------------------
+
+describe("applyTemplate – ROM tokens", () => {
+  it("replaces {platform} token", () => {
+    const meta: FileMetadata = {
+      baseName: "game",
+      ext: ".nes",
+      originalPath: "/roms/game.nes",
+      platform: "NES"
+    };
+    const result = applyTemplate("{platform}/{title}{ext}", meta);
+    expect(result).toBe("NES/game.nes");
+  });
+
+  it("replaces {region} token", () => {
+    const meta: FileMetadata = {
+      baseName: "game",
+      ext: ".sfc",
+      originalPath: "/roms/game.sfc",
+      title: "Zelda",
+      region: "Japan"
+    };
+    const result = applyTemplate("{title} ({region}){ext}", meta);
+    expect(result).toBe("Zelda (Japan).sfc");
+  });
+
+  it("returns empty string for missing platform", () => {
+    const meta: FileMetadata = {
+      baseName: "game",
+      ext: ".bin",
+      originalPath: "/roms/game.bin"
+    };
+    const result = applyTemplate("{platform}{ext}", meta);
+    expect(result).toBe(".bin");
+  });
+
+  it("returns empty string for missing region", () => {
+    const meta: FileMetadata = {
+      baseName: "game",
+      ext: ".nes",
+      originalPath: "/roms/game.nes"
+    };
+    const result = applyTemplate("{region}{ext}", meta);
+    expect(result).toBe(".nes");
   });
 });

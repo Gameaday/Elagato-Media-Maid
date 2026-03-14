@@ -11,7 +11,9 @@ import {
   PHOTO_EXTENSIONS,
   MUSIC_EXTENSIONS,
   BOOK_EXTENSIONS,
-  DOC_EXTENSIONS
+  DOC_EXTENSIONS,
+  ROM_EXTENSIONS,
+  PLATFORM_MAP
 } from "./config.js";
 
 export enum MediaType {
@@ -21,6 +23,7 @@ export enum MediaType {
   MUSIC = "music",
   BOOKS = "books",
   GENERIC_DOCS = "generic_docs",
+  EMULATION_ROMS = "emulation_roms",
   CUSTOM = "custom",
   UNKNOWN = "unknown"
 }
@@ -56,6 +59,10 @@ export interface FileMetadata {
   location?: string;
   /** Index/counter for disambiguation */
   index?: number;
+  /** ROM platform/console name (auto-detected from extension) */
+  platform?: string;
+  /** ROM region tag (e.g. "USA", "Japan", "Europe") */
+  region?: string;
 }
 
 export interface NamingPattern {
@@ -202,6 +209,26 @@ export const genericDocsPattern: NamingPattern = {
   }
 };
 
+// ---------------------------------------------------------------------------
+// Emulation ROMs Pattern
+// Format: "Game Name (Region).ext"
+// Folder:  "Platform/"   (auto-detected from file extension)
+// ---------------------------------------------------------------------------
+export const emulationRomsPattern: NamingPattern = {
+  mediaType: MediaType.EMULATION_ROMS,
+  label: "Emulation ROMs – By Platform",
+  extensions: ROM_EXTENSIONS,
+  format(meta) {
+    const title = sanitizeFilename(meta.title ?? meta.baseName);
+    const region = meta.region ? ` (${sanitizeFilename(meta.region)})` : "";
+    return `${title}${region}${meta.ext}`;
+  },
+  folderPath(meta) {
+    const platform = meta.platform ?? PLATFORM_MAP[meta.ext.toLowerCase()] ?? "Other";
+    return sanitizeFilename(platform);
+  }
+};
+
 /** All available patterns, ordered for UI display */
 export const ALL_PATTERNS: NamingPattern[] = [
   jellyfinTvPattern,
@@ -209,7 +236,8 @@ export const ALL_PATTERNS: NamingPattern[] = [
   photographyPattern,
   musicPattern,
   booksPattern,
-  genericDocsPattern
+  genericDocsPattern,
+  emulationRomsPattern
 ];
 
 /** Look up a pattern by MediaType */
@@ -243,6 +271,8 @@ export function applyTemplate(template: string, meta: FileMetadata): string {
       case "index":        return meta.index !== undefined ? pad(meta.index, 3) : "";
       case "ext":          return meta.ext;
       case "baseName":     return sanitizeFilename(meta.baseName);
+      case "platform":     return meta.platform ? sanitizeFilename(meta.platform) : "";
+      case "region":       return meta.region ? sanitizeFilename(meta.region) : "";
       default:             return `{${token}}`;
     }
   });
@@ -261,7 +291,8 @@ export function createCustomPattern(template: string): NamingPattern {
     ...PHOTO_EXTENSIONS,
     ...MUSIC_EXTENSIONS,
     ...BOOK_EXTENSIONS,
-    ...DOC_EXTENSIONS
+    ...DOC_EXTENSIONS,
+    ...ROM_EXTENSIONS
   ];
   // Deduplicate
   const extensions = [...new Set(allExtensions)];

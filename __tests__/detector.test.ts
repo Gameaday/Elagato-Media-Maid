@@ -102,4 +102,21 @@ describe("detectMediaType", () => {
     expect(result.extensionCounts[".mp3"]).toBe(2);
     expect(result.extensionCounts[".flac"]).toBe(1);
   });
+
+  it("detects ROM folder with emulation ROM files", async () => {
+    touch(tmpDir, "Super Mario Bros (USA).nes");
+    touch(tmpDir, "Zelda (USA).nes");
+    touch(tmpDir, "Metroid (Japan).nes");
+    const result = await detectMediaType(tmpDir);
+    expect(result.mediaType).toBe(MediaType.EMULATION_ROMS);
+    expect(result.confidence).toBeGreaterThan(0);
+  });
+
+  it("detects mixed ROM folder with multiple platforms", async () => {
+    touch(tmpDir, "Mario.nes");
+    touch(tmpDir, "Zelda.sfc");
+    touch(tmpDir, "Pokemon.gba");
+    const result = await detectMediaType(tmpDir);
+    expect(result.mediaType).toBe(MediaType.EMULATION_ROMS);
+  });
 });

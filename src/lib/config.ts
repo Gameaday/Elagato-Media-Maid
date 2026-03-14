@@ -89,6 +89,31 @@ export const SUBTITLE_EXTS = new Set([
   ".srt", ".sub", ".ass", ".ssa", ".vtt", ".idx"
 ]);
 
+export const ROM_EXTS = new Set([
+  // Nintendo
+  ".nes", ".fds",           // NES / Famicom Disk System
+  ".sfc", ".smc",           // SNES / Super Famicom
+  ".gb", ".gbc", ".gba",    // Game Boy / Color / Advance
+  ".nds", ".3ds", ".cia",   // DS / 3DS
+  ".n64", ".z64", ".v64",   // N64
+  ".xci", ".nsp",           // Switch
+  ".wbfs", ".wad", ".gcm", ".rvz", // Wii / GameCube
+  // Sega
+  ".gen",                   // Genesis / Mega Drive
+  ".sms",                   // Master System
+  ".gg",                    // Game Gear
+  ".32x",                   // 32X
+  ".cdi",                   // Dreamcast
+  // Sony
+  ".pbp",                   // PSP
+  // NEC
+  ".pce",                   // TurboGrafx-16 / PC Engine
+  // Atari
+  ".a26", ".a78",           // Atari 2600 / 7800
+  // Compressed disc images (commonly used for disc-based ROMs)
+  ".chd", ".cue"
+]);
+
 // ── Naming pattern extension lists (for renamer / patterns.ts) ─────
 
 /** Regex to strip release group tags from parsed episode titles */
@@ -121,6 +146,26 @@ export const BOOK_EXTENSIONS = Array.from(EBOOK_EXTS);
 /** Extensions recognised for generic document patterns */
 export const DOC_EXTENSIONS = Array.from(DOCUMENT_EXTS);
 
+/** Extensions recognised for emulation ROM patterns */
+export const ROM_EXTENSIONS = Array.from(ROM_EXTS);
+
+/** Map ROM file extensions to human-readable platform names for folder organization */
+export const PLATFORM_MAP: Record<string, string> = {
+  ".nes": "NES", ".fds": "NES",
+  ".sfc": "SNES", ".smc": "SNES",
+  ".gb": "Game Boy", ".gbc": "Game Boy Color", ".gba": "Game Boy Advance",
+  ".nds": "Nintendo DS", ".3ds": "Nintendo 3DS", ".cia": "Nintendo 3DS",
+  ".n64": "Nintendo 64", ".z64": "Nintendo 64", ".v64": "Nintendo 64",
+  ".xci": "Nintendo Switch", ".nsp": "Nintendo Switch",
+  ".wbfs": "Wii", ".wad": "Wii", ".gcm": "GameCube", ".rvz": "GameCube",
+  ".gen": "Sega Genesis", ".sms": "Sega Master System",
+  ".gg": "Sega Game Gear", ".32x": "Sega 32X", ".cdi": "Sega Dreamcast",
+  ".pbp": "PSP",
+  ".pce": "TurboGrafx-16",
+  ".a26": "Atari 2600", ".a78": "Atari 7800",
+  ".chd": "Disc Games", ".cue": "Disc Games"
+};
+
 // ── Category map for organizer / library-stats ─────────────────────
 
 export interface SortCategory {
@@ -136,6 +181,7 @@ export const SORT_CATEGORIES: SortCategory[] = [
   { folder: "eBooks", extensions: EBOOK_EXTS },
   { folder: "Installers", extensions: INSTALLER_EXTS },
   { folder: "Archives", extensions: ARCHIVE_EXTS },
+  { folder: "ROMs", extensions: ROM_EXTS },
   { folder: "Subtitles", extensions: SUBTITLE_EXTS },
   { folder: "Code", extensions: CODE_EXTS }
 ];
@@ -152,6 +198,12 @@ CATEGORY_MAP["NFO"] = NFO_EXTS;
 /** Standard SxxExx / NxNN and related TV patterns for detection */
 export const TV_EPISODE_RE =
   /[Ss]\d{1,2}[Ee]\d{1,2}|[Ss]eason\s*\d|[Ee]pisode\s*\d|\b\d{1,2}x\d{2}\b/;
+
+/** Regex to strip ROM scene/dump tags like [!], [b], [h1], [o2] from filenames */
+export const ROM_TAG_RE = /\s*\[[\w!]+\]/g;
+
+/** Regex to extract the first parenthesised region tag from a ROM filename */
+export const ROM_REGION_RE = /\(([^)]+)\)/;
 
 // ── Filesystem helpers ─────────────────────────────────────────────
 

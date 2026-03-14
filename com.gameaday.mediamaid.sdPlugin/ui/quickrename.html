@@ -18,20 +18,29 @@
     <div class="sdpi-item">
       <label class="sdpi-item-label" for="mediaType">Naming Standard</label>
       <select id="mediaType">
-        <option value="jellyfin_tv">Jellyfin / Plex – TV Show</option>
-        <option value="jellyfin_movie">Jellyfin / Plex – Movie</option>
-        <option value="photography">Photography – Date + Location</option>
-        <option value="music">Music – Track# Artist Song</option>
-        <option value="books">Books / eBooks – Author Title</option>
-        <option value="generic_docs">Documents – Date Prefixed</option>
-        <option value="custom">Custom Template</option>
+        <optgroup label="Video Libraries (Jellyfin / Plex)">
+          <option value="jellyfin_tv">TV Show — S01E01 format</option>
+          <option value="jellyfin_movie">Movie — Title (Year) format</option>
+        </optgroup>
+        <optgroup label="Media Archives">
+          <option value="photography">Photography — Date + Location</option>
+          <option value="music">Music — Track# Artist Song</option>
+          <option value="books">Books / eBooks — Author Title</option>
+          <option value="generic_docs">Documents — Date Prefixed</option>
+        </optgroup>
+        <optgroup label="Emulation">
+          <option value="emulation_roms">ROMs — By Platform</option>
+        </optgroup>
+        <optgroup label="Advanced">
+          <option value="custom">Custom Template</option>
+        </optgroup>
       </select>
     </div>
 
     <div class="sdpi-item" id="customFormatGroup" style="display:none">
       <label class="sdpi-item-label" for="customFormat">Format Template</label>
       <input type="text" id="customFormat" placeholder="{title} - S{season}E{episode}{ext}">
-      <div class="sdpi-info">Tokens: {title}, {season}, {episode}, {episodeTitle}, {year}, {artist}, {track}, {song}, {date}, {location}, {index}, {ext}, {baseName}</div>
+      <div class="sdpi-info">Tokens: {title}, {season}, {episode}, {episodeTitle}, {year}, {artist}, {track}, {song}, {date}, {location}, {index}, {platform}, {region}, {ext}, {baseName}</div>
     </div>
 
     <div class="sdpi-item">
@@ -65,12 +74,14 @@
       music:          "01 - Artist Name - Song Title.flac",
       books:          "Author Name - Book Title.epub",
       generic_docs:   "2024-06-15_Original Filename.pdf",
+      emulation_roms: "Super Mario Bros (USA).nes → NES/",
       custom:         ""
     };
 
     const HAS_FOLDER = {
       jellyfin_tv: true, jellyfin_movie: true, photography: false,
-      music: true, books: true, generic_docs: false, custom: false
+      music: true, books: true, generic_docs: false,
+      emulation_roms: true, custom: false
     };
 
     const folderPathEl    = document.getElementById("folderPath");

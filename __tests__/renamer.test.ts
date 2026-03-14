@@ -8,8 +8,8 @@ import { join } from "path";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 
-import { parseTvPattern, parseYearFromFilename, renameFolder } from "../src/lib/renamer";
-import { jellyfinTvPattern, jellyfinMoviePattern } from "../src/lib/patterns";
+import { parseTvPattern, parseYearFromFilename, parseRomPattern, renameFolder } from "../src/lib/renamer";
+import { jellyfinTvPattern, jellyfinMoviePattern, emulationRomsPattern } from "../src/lib/patterns";
 
 // ---------------------------------------------------------------------------
 // parseTvPattern
@@ -254,5 +254,81 @@ describe("renameFolder – path validation", () => {
   it("returns error for non-existent path", async () => {
     const result = await renameFolder("/nonexistent/path/xyz", jellyfinTvPattern, true);
     expect(Object.keys(result.errors).length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseRomPattern
+// ---------------------------------------------------------------------------
+describe("parseRomPattern", () => {
+  it("extracts region from parenthesised tag", () => {
+    const meta = parseRomPattern("Super Mario Bros (USA) [!]", ".nes");
+    expect(meta.region).toBe("USA");
+  });
+
+  it("extracts title by stripping scene and region tags", () => {
+    const meta = parseRomPattern("Super Mario Bros (USA) [!]", ".nes");
+    expect(meta.title).toBe("Super Mario Bros");
+  });
+
+  it("handles multi-region tags", () => {
+    const meta = parseRomPattern("Sonic the Hedgehog (Japan, USA)", ".gen");
+    expect(meta.region).toBe("Japan, USA");
+    expect(meta.title).toBe("Sonic the Hedgehog");
+  });
+
+  it("handles filenames with no tags", () => {
+    const meta = parseRomPattern("Zelda", ".sfc");
+    expect(meta.title).toBe("Zelda");
+    expect(meta.region).toBeUndefined();
+  });
+
+  it("maps extension to platform", () => {
+    const meta = parseRomPattern("Game", ".nes");
+    expect(meta.platform).toBe("NES");
+  });
+
+  it("maps .gba to Game Boy Advance", () => {
+    const meta = parseRomPattern("Game", ".gba");
+    expect(meta.platform).toBe("Game Boy Advance");
+  });
+
+  it("strips multiple scene tags", () => {
+    const meta = parseRomPattern("Game (Europe) [!] [h1]", ".sfc");
+    expect(meta.title).toBe("Game");
+    expect(meta.region).toBe("Europe");
+  });
+
+  it("returns undefined platform for unknown extension", () => {
+    const meta = parseRomPattern("Game", ".xyz");
+    expect(meta.platform).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renameFolder – emulation ROMs
+// ---------------------------------------------------------------------------
+describe("renameFolder – ROMs", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mediamaid-rom-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("renames ROM files and strips scene tags in dry run", async () => {
+    writeFileSync(join(tmpDir, "Super Mario Bros (USA) [!].nes"), "");
+    const result = await renameFolder(tmpDir, emulationRomsPattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("Super Mario Bros (USA).nes");
+  });
+
+  it("preserves region tag in renamed file", async () => {
+    writeFileSync(join(tmpDir, "Zelda (Japan) [b].sfc"), "");
+    const result = await renameFolder(tmpDir, emulationRomsPattern, true);
+    expect(result.operations[0].to).toContain("Zelda (Japan).sfc");
   });
 });

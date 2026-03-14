@@ -12,7 +12,7 @@ import { MediaType } from "./patterns.js";
 import { findAndParseNfo } from "./nfo-parser.js";
 import { logOperation } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
-import { validateFolderPath, RELEASE_TAG_RE } from "./config.js";
+import { validateFolderPath, RELEASE_TAG_RE, ROM_TAG_RE, ROM_REGION_RE, PLATFORM_MAP } from "./config.js";
 
 export interface RenameOperation {
   /** Original full path */
@@ -130,6 +130,41 @@ export function parseYearFromFilename(baseName: string): number | undefined {
 }
 
 /**
+ * Parse ROM metadata from a filename.
+ * Handles formats like:
+ *   Super Mario Bros. (USA) [!].nes
+ *   Legend of Zelda, The - A Link to the Past (USA) [!].sfc
+ *   Sonic the Hedgehog (Japan, USA).gen
+ *
+ * Extracts game title, region, and maps extension to platform.
+ */
+export function parseRomPattern(baseName: string, ext: string): Partial<FileMetadata> {
+  const meta: Partial<FileMetadata> = {};
+
+  // Extract region from the first parenthesised tag
+  const regionMatch = ROM_REGION_RE.exec(baseName);
+  if (regionMatch) {
+    meta.region = regionMatch[1].trim();
+  }
+
+  // Strip scene tags [!], [b], [h1], etc. and parenthesised tags for a clean title
+  const title = baseName
+    .replace(ROM_TAG_RE, "")
+    .replace(/\([^)]*\)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (title) {
+    meta.title = title;
+  }
+
+  // Map extension to platform name
+  meta.platform = PLATFORM_MAP[ext.toLowerCase()];
+
+  return meta;
+}
+
+/**
  * Build FileMetadata from a filename and any NFO data.
  * NFO data takes precedence over filename parsing.
  * Selects the appropriate parser based on the target pattern's media type.
@@ -147,20 +182,22 @@ async function buildMetadata(
   // Select parser based on the pattern's media type
   const isMusicPattern = pattern.mediaType === MediaType.MUSIC;
   const isTvPattern = pattern.mediaType === MediaType.JELLYFIN_TV;
+  const isRomPattern = pattern.mediaType === MediaType.EMULATION_ROMS;
 
   const fromTv = isTvPattern ? parseTvPattern(baseName) : {};
   const fromMusic = isMusicPattern ? parseMusicPattern(baseName) : {};
+  const fromRom = isRomPattern ? parseRomPattern(baseName, ext) : {};
 
   // For movie/photo/book/doc patterns, try TV parsing only for
-  // season/episode extraction (useful for metadata) when not music
-  const fromTvFallback = !isMusicPattern && !isTvPattern ? parseTvPattern(baseName) : {};
+  // season/episode extraction (useful for metadata) when not music or ROM
+  const fromTvFallback = !isMusicPattern && !isTvPattern && !isRomPattern ? parseTvPattern(baseName) : {};
 
   // Merge: NFO takes precedence, then pattern-appropriate parser
   const merged: FileMetadata = {
     baseName,
     ext,
     originalPath: filePath,
-    title: nfoMeta.title ?? fromTv.title ?? fromTvFallback.title ?? baseName,
+    title: nfoMeta.title ?? fromTv.title ?? fromRom.title ?? fromTvFallback.title ?? baseName,
     season: nfoMeta.season ?? fromTv.season ?? fromTvFallback.season,
     episode: nfoMeta.episode ?? fromTv.episode ?? fromTvFallback.episode,
     episodeTitle: nfoMeta.episodeTitle ?? fromTv.episodeTitle ?? fromTvFallback.episodeTitle,
@@ -169,7 +206,9 @@ async function buildMetadata(
     album: nfoMeta.album,
     trackNumber: nfoMeta.trackNumber ?? fromMusic.trackNumber,
     songTitle: fromMusic.songTitle ?? baseName,
-    index
+    index,
+    platform: fromRom.platform,
+    region: fromRom.region
   };
 
   return merged;

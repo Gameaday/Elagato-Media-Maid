@@ -14,6 +14,7 @@ import {
   AUDIO_EXTS,
   EBOOK_EXTS,
   DOCUMENT_EXTS,
+  ROM_EXTS,
   TV_EPISODE_RE,
   DETECTION_MAX_DEPTH,
   validateFolderPath
@@ -137,6 +138,7 @@ export async function detectMediaType(folderPath: string): Promise<DetectionResu
   const musicCount = countMatching(extCounts, AUDIO_EXTS);
   const bookCount = countMatching(extCounts, EBOOK_EXTS);
   const docCount = countMatching(extCounts, DOCUMENT_EXTS);
+  const romCount = countMatching(extCounts, ROM_EXTS);
   const tvPatternCount = await countTvPatternMatches(folderPath);
   const nfoPresent = await hasNfoFiles(folderPath);
 
@@ -167,6 +169,11 @@ export async function detectMediaType(folderPath: string): Promise<DetectionResu
       type: MediaType.GENERIC_DOCS,
       score: docCount,
       reason: `${docCount} document file(s)`
+    },
+    {
+      type: MediaType.EMULATION_ROMS,
+      score: romCount,
+      reason: `${romCount} ROM file(s)`
     }
   ];
 
