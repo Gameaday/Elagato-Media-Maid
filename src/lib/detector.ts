@@ -5,7 +5,7 @@
  * the dominant media type so the correct renaming pattern can be applied.
  */
 
-import { readdirSync, statSync } from "fs";
+import { readdir, stat } from "fs/promises";
 import { extname, join } from "path";
 import { MediaType } from "./patterns.js";
 import {
@@ -34,30 +34,30 @@ export interface DetectionResult {
 /**
  * Recursively collect file extensions from a directory (up to maxDepth levels deep).
  */
-function collectExtensions(dir: string, depth = 0, maxDepth = DETECTION_MAX_DEPTH): Record<string, number> {
+async function collectExtensions(dir: string, depth = 0, maxDepth = DETECTION_MAX_DEPTH): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
   let entries: string[];
   try {
-    entries = readdirSync(dir);
+    entries = await readdir(dir);
   } catch {
     return counts;
   }
 
   for (const name of entries) {
     const fullPath = join(dir, name);
-    let stat;
+    let fileStat;
     try {
-      stat = statSync(fullPath);
+      fileStat = await stat(fullPath);
     } catch {
       continue;
     }
 
-    if (stat.isDirectory() && depth < maxDepth) {
-      const sub = collectExtensions(fullPath, depth + 1, maxDepth);
+    if (fileStat.isDirectory() && depth < maxDepth) {
+      const sub = await collectExtensions(fullPath, depth + 1, maxDepth);
       for (const [ext, count] of Object.entries(sub)) {
         counts[ext] = (counts[ext] ?? 0) + count;
       }
-    } else if (stat.isFile()) {
+    } else if (fileStat.isFile()) {
       const ext = extname(name).toLowerCase();
       if (ext) {
         counts[ext] = (counts[ext] ?? 0) + 1;
@@ -80,10 +80,10 @@ function countMatching(extCounts: Record<string, number>, extSet: Set<string>): 
 /**
  * Check how many filenames in the directory look like TV episode patterns.
  */
-function countTvPatternMatches(dir: string): number {
+async function countTvPatternMatches(dir: string): Promise<number> {
   let matches = 0;
   try {
-    const entries = readdirSync(dir);
+    const entries = await readdir(dir);
     for (const name of entries) {
       if (TV_EPISODE_RE.test(name)) matches++;
     }
@@ -97,9 +97,9 @@ function countTvPatternMatches(dir: string): number {
  * Check for the presence of NFO companion files, which strongly indicate
  * Kodi/Jellyfin-managed media.
  */
-function hasNfoFiles(dir: string): boolean {
+async function hasNfoFiles(dir: string): Promise<boolean> {
   try {
-    const entries = readdirSync(dir);
+    const entries = await readdir(dir);
     return entries.some(n => n.toLowerCase().endsWith(".nfo"));
   } catch {
     return false;
@@ -109,7 +109,7 @@ function hasNfoFiles(dir: string): boolean {
 /**
  * Detect the dominant media type in the given directory.
  */
-export function detectMediaType(folderPath: string): DetectionResult {
+export async function detectMediaType(folderPath: string): Promise<DetectionResult> {
   const pathCheck = validateFolderPath(folderPath);
   if (!pathCheck.valid) {
     return {
@@ -120,7 +120,7 @@ export function detectMediaType(folderPath: string): DetectionResult {
     };
   }
 
-  const extCounts = collectExtensions(folderPath);
+  const extCounts = await collectExtensions(folderPath);
   const totalFiles = Object.values(extCounts).reduce((a, b) => a + b, 0);
 
   if (totalFiles === 0) {
@@ -137,8 +137,8 @@ export function detectMediaType(folderPath: string): DetectionResult {
   const musicCount = countMatching(extCounts, AUDIO_EXTS);
   const bookCount = countMatching(extCounts, EBOOK_EXTS);
   const docCount = countMatching(extCounts, DOCUMENT_EXTS);
-  const tvPatternCount = countTvPatternMatches(folderPath);
-  const nfoPresent = hasNfoFiles(folderPath);
+  const tvPatternCount = await countTvPatternMatches(folderPath);
+  const nfoPresent = await hasNfoFiles(folderPath);
 
   // Score each type
   const scores: Array<{ type: MediaType; score: number; reason: string }> = [

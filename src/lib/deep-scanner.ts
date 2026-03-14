@@ -6,7 +6,7 @@
  * naming convention for their detected media type.
  */
 
-import { readdirSync, statSync } from "fs";
+import { readdir, stat } from "fs/promises";
 import { join, extname, basename, dirname } from "path";
 import { detectMediaType } from "./detector.js";
 import { getPattern } from "./patterns.js";
@@ -50,13 +50,13 @@ export interface DeepScanResult {
 /**
  * Recursively collect all files from a directory tree.
  */
-function collectFilesRecursive(dir: string, maxDepth = DEFAULT_MAX_DEPTH, depth = 0): string[] {
+async function collectFilesRecursive(dir: string, maxDepth = DEFAULT_MAX_DEPTH, depth = 0): Promise<string[]> {
   if (depth > maxDepth) return [];
 
   const results: string[] = [];
   let entries: string[];
   try {
-    entries = readdirSync(dir);
+    entries = await readdir(dir);
   } catch {
     return results;
   }
@@ -64,16 +64,16 @@ function collectFilesRecursive(dir: string, maxDepth = DEFAULT_MAX_DEPTH, depth 
   for (const name of entries) {
     if (name.startsWith(".")) continue;
     const fullPath = join(dir, name);
-    let stat;
+    let fileStat;
     try {
-      stat = statSync(fullPath);
+      fileStat = await stat(fullPath);
     } catch {
       continue;
     }
 
-    if (stat.isDirectory()) {
-      results.push(...collectFilesRecursive(fullPath, maxDepth, depth + 1));
-    } else if (stat.isFile()) {
+    if (fileStat.isDirectory()) {
+      results.push(...await collectFilesRecursive(fullPath, maxDepth, depth + 1));
+    } else if (fileStat.isFile()) {
       results.push(fullPath);
     }
   }
@@ -139,7 +139,7 @@ export async function deepScan(
     return result;
   }
 
-  const allFiles = collectFilesRecursive(libraryRoot);
+  const allFiles = await collectFilesRecursive(libraryRoot);
   result.filesExamined = allFiles.length;
 
   // Count unique directories
@@ -151,7 +151,7 @@ export async function deepScan(
   }
 
   // Detect the library's media type
-  const detection = detectMediaType(libraryRoot);
+  const detection = await detectMediaType(libraryRoot);
   const pattern = getPattern(detection.mediaType);
 
   if (!pattern) {

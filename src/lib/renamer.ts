@@ -5,8 +5,7 @@
  * Supports dry-run mode (preview only) and returns all operations for undo.
  */
 
-import { readdirSync, statSync, existsSync } from "fs";
-import { rename, mkdir } from "fs/promises";
+import { rename, mkdir, readdir, stat } from "fs/promises";
 import { join, extname, basename } from "path";
 import type { NamingPattern, FileMetadata } from "./patterns.js";
 import { MediaType } from "./patterns.js";
@@ -177,12 +176,24 @@ async function buildMetadata(
 }
 
 /**
+ * Check if a path exists on the filesystem.
+ */
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await stat(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Ensure the proposed filename does not conflict with an existing file.
  * Checks both the in-memory tracking set and the actual filesystem to
  * avoid race conditions with external modifications.
  */
-function deconflict(proposedPath: string, existingFiles: Set<string>): string {
-  if (!existingFiles.has(proposedPath) && !existsSync(proposedPath)) return proposedPath;
+async function deconflict(proposedPath: string, existingFiles: Set<string>): Promise<string> {
+  if (!existingFiles.has(proposedPath) && !(await pathExists(proposedPath))) return proposedPath;
 
   const ext = extname(proposedPath);
   const base = proposedPath.slice(0, -ext.length);
@@ -191,7 +202,7 @@ function deconflict(proposedPath: string, existingFiles: Set<string>): string {
   do {
     candidate = `${base} (${counter})${ext}`;
     counter++;
-  } while (existingFiles.has(candidate) || existsSync(candidate));
+  } while (existingFiles.has(candidate) || await pathExists(candidate));
   return candidate;
 }
 
@@ -223,7 +234,7 @@ export async function renameFolder(
 
   let entries: string[];
   try {
-    entries = readdirSync(folderPath);
+    entries = await readdir(folderPath);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     result.errors["[folder]"] = `Could not read folder: ${msg}`;
@@ -231,16 +242,18 @@ export async function renameFolder(
   }
 
   // Filter to files matching the pattern's extensions
-  const targetFiles = entries.filter(name => {
+  const targetFiles: string[] = [];
+  for (const name of entries) {
     const ext = extname(name).toLowerCase();
-    let stat;
     try {
-      stat = statSync(join(folderPath, name));
+      const fileStat = await stat(join(folderPath, name));
+      if (fileStat.isFile() && pattern.extensions.includes(ext)) {
+        targetFiles.push(name);
+      }
     } catch {
-      return false;
+      // skip unreadable entries
     }
-    return stat.isFile() && pattern.extensions.includes(ext);
-  });
+  }
 
   // Build a set of all file paths currently in the folder for deconfliction
   const existingPaths = new Set(
@@ -264,7 +277,7 @@ export async function renameFolder(
 
     const newName = pattern.format(meta);
     let toPath = join(folderPath, newName);
-    toPath = deconflict(toPath, existingPaths);
+    toPath = await deconflict(toPath, existingPaths);
 
     const op: RenameOperation = {
       from: fromPath,
@@ -330,23 +343,25 @@ export async function organizeWithFolderStructure(
 
   let entries: string[];
   try {
-    entries = readdirSync(libraryRoot);
+    entries = await readdir(libraryRoot);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     result.errors["[folder]"] = `Could not read library root: ${msg}`;
     return result;
   }
 
-  const targetFiles = entries.filter(name => {
+  const targetFiles: string[] = [];
+  for (const name of entries) {
     const ext = extname(name).toLowerCase();
-    let stat;
     try {
-      stat = statSync(join(libraryRoot, name));
+      const fileStat = await stat(join(libraryRoot, name));
+      if (fileStat.isFile() && pattern.extensions.includes(ext)) {
+        targetFiles.push(name);
+      }
     } catch {
-      return false;
+      // skip unreadable entries
     }
-    return stat.isFile() && pattern.extensions.includes(ext);
-  });
+  }
 
   const undoOps: FileOperation[] = [];
   const createdDirs = new Set<string>();
@@ -379,7 +394,7 @@ export async function organizeWithFolderStructure(
 
     if (!dryRun) {
       try {
-        const dirExisted = existsSync(targetDir);
+        const dirExisted = await pathExists(targetDir);
         await mkdir(targetDir, { recursive: true });
         if (!dirExisted && !createdDirs.has(targetDir)) {
           undoOps.push({ type: "mkdir", from: "", to: targetDir });

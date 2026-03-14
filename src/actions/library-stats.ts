@@ -196,7 +196,7 @@ export class LibraryStatsAction extends SingletonAction<LibraryStatsSettings> {
     }
 
     try {
-      const stats = calculateLibraryStats(settings.libraryRoot);
+      const stats = await calculateLibraryStats(settings.libraryRoot);
       this.statsCache.set(actionObj.id, stats);
       this.statIndex.set(actionObj.id, 0);
 
