@@ -491,7 +491,8 @@ describe("jellyfinMovieVersionPattern", () => {
       originalPath: "/movies/Inception.mkv",
       title: "Inception",
       year: 2010,
-      resolution: "2160p"
+      resolution: "2160p",
+      versionTag: "4K"
     };
     expect(jellyfinMovieVersionPattern.format(meta)).toBe("Inception (2010) - [4K].mkv");
   });
@@ -635,5 +636,118 @@ describe("applyTemplate – resolution and album tokens", () => {
     };
     const result = applyTemplate("{album}{ext}", meta);
     expect(result).toBe(".flac");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyTemplate – source, hdr, versionTag tokens
+// ---------------------------------------------------------------------------
+
+describe("applyTemplate – quality tokens", () => {
+  it("replaces {source} token", () => {
+    const meta: FileMetadata = {
+      baseName: "movie",
+      ext: ".mkv",
+      originalPath: "/movies/movie.mkv",
+      source: "Bluray"
+    };
+    const result = applyTemplate("{title} [{source}]{ext}", meta);
+    expect(result).toBe("movie [Bluray].mkv");
+  });
+
+  it("replaces {hdr} token", () => {
+    const meta: FileMetadata = {
+      baseName: "movie",
+      ext: ".mkv",
+      originalPath: "/movies/movie.mkv",
+      hdr: "HDR10"
+    };
+    const result = applyTemplate("{title} [{hdr}]{ext}", meta);
+    expect(result).toBe("movie [HDR10].mkv");
+  });
+
+  it("replaces {versionTag} token", () => {
+    const meta: FileMetadata = {
+      baseName: "movie",
+      ext: ".mkv",
+      originalPath: "/movies/movie.mkv",
+      versionTag: "4K Bluray Remux HDR"
+    };
+    const result = applyTemplate("{title} - [{versionTag}]{ext}", meta);
+    expect(result).toBe("movie - [4K Bluray Remux HDR].mkv");
+  });
+
+  it("returns empty string for missing source", () => {
+    const meta: FileMetadata = {
+      baseName: "movie",
+      ext: ".mkv",
+      originalPath: "/movies/movie.mkv"
+    };
+    const result = applyTemplate("{source}", meta);
+    expect(result).toBe("");
+  });
+
+  it("returns empty string for missing hdr", () => {
+    const meta: FileMetadata = {
+      baseName: "movie",
+      ext: ".mkv",
+      originalPath: "/movies/movie.mkv"
+    };
+    const result = applyTemplate("{hdr}", meta);
+    expect(result).toBe("");
+  });
+
+  it("returns empty string for missing versionTag", () => {
+    const meta: FileMetadata = {
+      baseName: "movie",
+      ext: ".mkv",
+      originalPath: "/movies/movie.mkv"
+    };
+    const result = applyTemplate("{versionTag}", meta);
+    expect(result).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// jellyfinMovieVersionPattern – enhanced version tags
+// ---------------------------------------------------------------------------
+
+describe("jellyfinMovieVersionPattern – enhanced version tags", () => {
+  it("uses full version tag when available", () => {
+    const meta: FileMetadata = {
+      baseName: "Inception",
+      ext: ".mkv",
+      originalPath: "/movies/Inception.mkv",
+      title: "Inception",
+      year: 2010,
+      resolution: "1080p",
+      source: "Bluray",
+      versionTag: "1080p Bluray"
+    };
+    expect(jellyfinMovieVersionPattern.format(meta)).toBe("Inception (2010) - [1080p Bluray].mkv");
+  });
+
+  it("falls back to resolution when no version tag", () => {
+    const meta: FileMetadata = {
+      baseName: "Inception",
+      ext: ".mkv",
+      originalPath: "/movies/Inception.mkv",
+      title: "Inception",
+      year: 2010,
+      resolution: "1080p"
+    };
+    expect(jellyfinMovieVersionPattern.format(meta)).toBe("Inception (2010) - [1080p].mkv");
+  });
+
+  it("includes HDR in version tag", () => {
+    const meta: FileMetadata = {
+      baseName: "Inception",
+      ext: ".mkv",
+      originalPath: "/movies/Inception.mkv",
+      title: "Inception",
+      year: 2010,
+      versionTag: "4K Bluray Remux HDR"
+    };
+    expect(jellyfinMovieVersionPattern.format(meta)).toBe("Inception (2010) - [4K Bluray Remux HDR].mkv");
   });
 });

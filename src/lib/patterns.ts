@@ -13,8 +13,7 @@ import {
   BOOK_EXTENSIONS,
   DOC_EXTENSIONS,
   ROM_EXTENSIONS,
-  PLATFORM_MAP,
-  RESOLUTION_LABELS
+  PLATFORM_MAP
 } from "./config.js";
 
 export enum MediaType {
@@ -67,6 +66,12 @@ export interface FileMetadata {
   region?: string;
   /** Video resolution tag (e.g. "1080p", "4K") for multi-version movies */
   resolution?: string;
+  /** Video source tag (e.g. "Bluray", "WEBDL", "REMUX") */
+  source?: string;
+  /** HDR / dynamic range tag (e.g. "HDR", "HDR10+", "DV") */
+  hdr?: string;
+  /** Full version tag combining resolution, source, and HDR (e.g. "1080p Bluray HDR") */
+  versionTag?: string;
 }
 
 export interface NamingPattern {
@@ -144,11 +149,11 @@ export const jellyfinMoviePattern: NamingPattern = {
 
 // ---------------------------------------------------------------------------
 // Jellyfin Movie Multi-Version Pattern
-// Format: "Movie Title (Year) - [Resolution].ext"
+// Format: "Movie Title (Year) - [Resolution Source HDR].ext"
 // Folder:  "Movie Title (Year)/"
 // Jellyfin docs: multiple versions of the same movie stored in one folder.
 //   Movie Title (Year)/Movie Title (Year) - [1080p Bluray].mkv
-//   Movie Title (Year)/Movie Title (Year) - [2160p 4K].mkv
+//   Movie Title (Year)/Movie Title (Year) - [2160p Bluray Remux HDR].mkv
 // ---------------------------------------------------------------------------
 export const jellyfinMovieVersionPattern: NamingPattern = {
   mediaType: MediaType.JELLYFIN_MOVIE_VERSION,
@@ -157,9 +162,9 @@ export const jellyfinMovieVersionPattern: NamingPattern = {
   format(meta) {
     const title = sanitizeFilename(meta.title ?? meta.baseName);
     const year = meta.year ? ` (${meta.year})` : "";
-    const raw = meta.resolution?.toLowerCase() ?? "";
-    const res = RESOLUTION_LABELS[raw] ?? meta.resolution;
-    const tag = res ? ` - [${res}]` : "";
+    // Prefer the full version tag; fall back to resolution-only
+    const tagContent = meta.versionTag ?? meta.resolution;
+    const tag = tagContent ? ` - [${tagContent}]` : "";
     return `${title}${year}${tag}${meta.ext}`;
   },
   folderPath(meta) {
@@ -286,7 +291,8 @@ export function getPattern(mediaType: MediaType): NamingPattern | undefined {
 // Custom Template Pattern
 // Tokens: {title}, {season}, {episode}, {episodeTitle}, {year}, {artist},
 //         {track}, {song}, {date}, {location}, {index}, {ext}, {baseName},
-//         {platform}, {region}, {resolution}, {album}
+//         {platform}, {region}, {resolution}, {album}, {source}, {hdr},
+//         {versionTag}
 // ---------------------------------------------------------------------------
 
 /**
@@ -313,6 +319,9 @@ export function applyTemplate(template: string, meta: FileMetadata): string {
       case "region":       return meta.region ? sanitizeFilename(meta.region) : "";
       case "resolution":   return meta.resolution ?? "";
       case "album":        return meta.album ? sanitizeFilename(meta.album) : "";
+      case "source":       return meta.source ?? "";
+      case "hdr":          return meta.hdr ?? "";
+      case "versionTag":   return meta.versionTag ?? "";
       default:             return `{${token}}`;
     }
   });

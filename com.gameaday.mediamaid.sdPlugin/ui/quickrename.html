@@ -41,7 +41,7 @@
     <div class="sdpi-item" id="customFormatGroup" style="display:none">
       <label class="sdpi-item-label" for="customFormat">Format Template</label>
       <input type="text" id="customFormat" placeholder="{title} - S{season}E{episode}{ext}">
-      <div class="sdpi-info">Tokens: {title}, {season}, {episode}, {episodeTitle}, {year}, {artist}, {track}, {song}, {album}, {date}, {location}, {index}, {platform}, {region}, {resolution}, {ext}, {baseName}</div>
+      <div class="sdpi-info">Tokens: {title}, {season}, {episode}, {episodeTitle}, {year}, {artist}, {track}, {song}, {album}, {date}, {location}, {index}, {platform}, {region}, {resolution}, {source}, {hdr}, {versionTag}, {ext}, {baseName}</div>
     </div>
 
     <div class="sdpi-item">
@@ -71,7 +71,7 @@
     const PREVIEWS = {
       jellyfin_tv:            "Show Name - S01E02 - Episode Title.mkv",
       jellyfin_movie:         "Movie Title (2024).mkv",
-      jellyfin_movie_version: "Movie Title (2024) - [1080p].mkv → Movie Title (2024)/",
+      jellyfin_movie_version: "Movie Title (2024) - [1080p Bluray].mkv → Movie Title (2024)/",
       photography:            "2024-06-15_Paris_001.jpg",
       music:                  "01 - Artist Name - Song Title.flac → Artist/Album (Year)/",
       books:                  "Author Name - Book Title (2024).epub → Author Name/",

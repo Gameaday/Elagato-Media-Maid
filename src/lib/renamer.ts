@@ -12,7 +12,7 @@ import { MediaType } from "./patterns.js";
 import { findAndParseNfo } from "./nfo-parser.js";
 import { logOperation } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
-import { validateFolderPath, RELEASE_TAG_RE, ROM_TAG_RE, ROM_REGION_RE, PLATFORM_MAP, RESOLUTION_RE, RESOLUTION_LABELS } from "./config.js";
+import { validateFolderPath, RELEASE_TAG_RE, ROM_TAG_RE, ROM_REGION_RE, PLATFORM_MAP, RESOLUTION_RE, RESOLUTION_LABELS, SOURCE_TAG_RE, SOURCE_LABELS, HDR_TAG_RE, HDR_LABELS } from "./config.js";
 
 export interface RenameOperation {
   /** Original full path */
@@ -142,6 +142,44 @@ export function parseResolutionFromFilename(baseName: string): string | undefine
 }
 
 /**
+ * Parse the video source tag from a filename (e.g. "BluRay", "WEB-DL", "REMUX").
+ * Returns a normalised label.
+ */
+export function parseSourceFromFilename(baseName: string): string | undefined {
+  const m = SOURCE_TAG_RE.exec(baseName);
+  if (!m) return undefined;
+  const raw = m[1].toLowerCase();
+  return SOURCE_LABELS[raw] ?? m[1];
+}
+
+/**
+ * Parse HDR/dynamic-range tag from a filename (e.g. "HDR", "HDR10+", "DV").
+ * Returns a normalised label.
+ */
+export function parseHdrFromFilename(baseName: string): string | undefined {
+  const m = HDR_TAG_RE.exec(baseName);
+  if (!m) return undefined;
+  const raw = m[1].toLowerCase();
+  return HDR_LABELS[raw] ?? m[1];
+}
+
+/**
+ * Build a full Jellyfin-style version tag from filename components.
+ * Combines resolution, source, and HDR info into a single bracket tag.
+ * E.g. "1080p Bluray", "4K HDR", "2160p Bluray Remux DV"
+ */
+export function buildVersionTag(baseName: string): string | undefined {
+  const parts: string[] = [];
+  const res = parseResolutionFromFilename(baseName);
+  if (res) parts.push(res);
+  const src = parseSourceFromFilename(baseName);
+  if (src) parts.push(src);
+  const hdr = parseHdrFromFilename(baseName);
+  if (hdr) parts.push(hdr);
+  return parts.length > 0 ? parts.join(" ") : undefined;
+}
+
+/**
  * Extract a clean movie title from a filename by stripping year, resolution, and release tags.
  * E.g. "Inception.2010.1080p.BluRay.x264" → "Inception"
  */
@@ -238,7 +276,10 @@ async function buildMetadata(
     index,
     platform: fromRom.platform,
     region: fromRom.region,
-    resolution: parseResolutionFromFilename(baseName)
+    resolution: parseResolutionFromFilename(baseName),
+    source: parseSourceFromFilename(baseName),
+    hdr: parseHdrFromFilename(baseName),
+    versionTag: buildVersionTag(baseName)
   };
 
   return merged;

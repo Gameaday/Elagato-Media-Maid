@@ -8,7 +8,7 @@ import { join } from "path";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 
-import { parseTvPattern, parseYearFromFilename, parseRomPattern, parseResolutionFromFilename, parseMovieTitle, renameFolder } from "../src/lib/renamer";
+import { parseTvPattern, parseYearFromFilename, parseRomPattern, parseResolutionFromFilename, parseMovieTitle, parseSourceFromFilename, parseHdrFromFilename, buildVersionTag, renameFolder } from "../src/lib/renamer";
 import { jellyfinTvPattern, jellyfinMoviePattern, jellyfinMovieVersionPattern, emulationRomsPattern } from "../src/lib/patterns";
 
 // ---------------------------------------------------------------------------
@@ -230,8 +230,8 @@ describe("renameFolder – Jellyfin Movie Multi-Version (dry run)", () => {
     const result = await renameFolder(tmpDir, jellyfinMovieVersionPattern, true);
     expect(result.operations.length).toBe(2);
     const names = result.operations.map(op => op.to.split("/").pop() ?? op.to.split("\\").pop());
-    expect(names.some(n => n?.includes("[1080p]"))).toBe(true);
-    expect(names.some(n => n?.includes("[4K]"))).toBe(true);
+    expect(names.some(n => n?.includes("[1080p Bluray]"))).toBe(true);
+    expect(names.some(n => n?.includes("[4K WEBDL]"))).toBe(true);
   });
 
   it("both files get year in output", async () => {
@@ -408,5 +408,143 @@ describe("renameFolder – ROMs", () => {
     writeFileSync(join(tmpDir, "Zelda (Japan) [b].sfc"), "");
     const result = await renameFolder(tmpDir, emulationRomsPattern, true);
     expect(result.operations[0].to).toContain("Zelda (Japan).sfc");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseSourceFromFilename
+// ---------------------------------------------------------------------------
+describe("parseSourceFromFilename", () => {
+  it("extracts BluRay", () => {
+    expect(parseSourceFromFilename("Movie.2021.1080p.BluRay.x264")).toBe("Bluray");
+  });
+
+  it("extracts Blu-Ray variant", () => {
+    expect(parseSourceFromFilename("Movie.Blu-Ray.mkv")).toBe("Bluray");
+  });
+
+  it("extracts WEB-DL", () => {
+    expect(parseSourceFromFilename("Movie.2021.1080p.WEB-DL")).toBe("WEBDL");
+  });
+
+  it("extracts WEBDL without hyphen", () => {
+    expect(parseSourceFromFilename("Movie.WEBDL.1080p")).toBe("WEBDL");
+  });
+
+  it("extracts REMUX", () => {
+    expect(parseSourceFromFilename("Movie.2160p.REMUX.mkv")).toBe("Remux");
+  });
+
+  it("extracts HDTV", () => {
+    expect(parseSourceFromFilename("Show.S01E01.HDTV.mkv")).toBe("HDTV");
+  });
+
+  it("extracts WEBRip", () => {
+    expect(parseSourceFromFilename("Movie.WEBRip.1080p")).toBe("WEBRip");
+  });
+
+  it("extracts DVDRip", () => {
+    expect(parseSourceFromFilename("Movie.DVDRip.XviD")).toBe("DVDRip");
+  });
+
+  it("returns undefined when no source tag present", () => {
+    expect(parseSourceFromFilename("Movie.2021.mkv")).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseHdrFromFilename
+// ---------------------------------------------------------------------------
+describe("parseHdrFromFilename", () => {
+  it("extracts HDR", () => {
+    expect(parseHdrFromFilename("Movie.2160p.HDR.mkv")).toBe("HDR");
+  });
+
+  it("extracts HDR10", () => {
+    expect(parseHdrFromFilename("Movie.HDR10.BluRay")).toBe("HDR10");
+  });
+
+  it("extracts HDR10+", () => {
+    expect(parseHdrFromFilename("Movie.HDR10+.mkv")).toBe("HDR10+");
+  });
+
+  it("extracts DV (Dolby Vision shorthand)", () => {
+    expect(parseHdrFromFilename("Movie.DV.2160p")).toBe("DV");
+  });
+
+  it("extracts DoVi", () => {
+    expect(parseHdrFromFilename("Movie.DoVi.mkv")).toBe("DV");
+  });
+
+  it("returns undefined when no HDR tag present", () => {
+    expect(parseHdrFromFilename("Movie.1080p.BluRay")).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildVersionTag
+// ---------------------------------------------------------------------------
+describe("buildVersionTag", () => {
+  it("combines resolution and source", () => {
+    expect(buildVersionTag("Movie.1080p.BluRay.x264")).toBe("1080p Bluray");
+  });
+
+  it("combines resolution, source, and HDR", () => {
+    expect(buildVersionTag("Movie.2160p.BluRay.REMUX.HDR")).toBe("4K Bluray HDR");
+  });
+
+  it("returns resolution only when no source/HDR", () => {
+    expect(buildVersionTag("Movie.720p.mkv")).toBe("720p");
+  });
+
+  it("returns source only when no resolution", () => {
+    expect(buildVersionTag("Movie.BluRay.mkv")).toBe("Bluray");
+  });
+
+  it("returns HDR with resolution", () => {
+    expect(buildVersionTag("Movie.2160p.HDR10.mkv")).toBe("4K HDR10");
+  });
+
+  it("returns undefined for files with no quality tags", () => {
+    expect(buildVersionTag("regular_document.txt")).toBeUndefined();
+  });
+
+  it("handles DV + resolution combo", () => {
+    expect(buildVersionTag("Movie.2160p.DV.mkv")).toBe("4K DV");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Jellyfin Movie Multi-Version with enhanced version tags
+// ---------------------------------------------------------------------------
+describe("renameFolder – enhanced multi-version tags", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = createTmpDir();
+  });
+
+  afterEach(() => cleanupDir(tmpDir));
+
+  it("includes source tag in multi-version output", async () => {
+    writeFileSync(join(tmpDir, "Movie.2020.1080p.BluRay.mkv"), "");
+    const result = await renameFolder(tmpDir, jellyfinMovieVersionPattern, true);
+    expect(result.operations.length).toBe(1);
+    const name = result.operations[0].to.split("/").pop() ?? "";
+    expect(name).toContain("[1080p Bluray]");
+  });
+
+  it("includes HDR tag in multi-version output", async () => {
+    writeFileSync(join(tmpDir, "Movie.2020.2160p.HDR.mkv"), "");
+    const result = await renameFolder(tmpDir, jellyfinMovieVersionPattern, true);
+    const name = result.operations[0].to.split("/").pop() ?? "";
+    expect(name).toContain("[4K HDR]");
+  });
+
+  it("includes REMUX and HDR together", async () => {
+    writeFileSync(join(tmpDir, "Movie.2020.2160p.REMUX.HDR.mkv"), "");
+    const result = await renameFolder(tmpDir, jellyfinMovieVersionPattern, true);
+    const name = result.operations[0].to.split("/").pop() ?? "";
+    expect(name).toContain("[4K Remux HDR]");
   });
 });

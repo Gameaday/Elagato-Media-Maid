@@ -137,6 +137,108 @@ export const RESOLUTION_LABELS: Record<string, string> = {
 };
 
 /**
+ * Regex to capture source/quality tags from filenames.
+ * Matches: BluRay, Bluray, WEB-DL, WEBDL, HDTV, REMUX, BDRip, BRRip, DVDRip, WEBRip.
+ */
+export const SOURCE_TAG_RE = /\b(Blu-?Ray|REMUX|WEB-?DL|WEB-?Rip|HDTV|BD-?Rip|BR-?Rip|DVD-?Rip|HDRip)\b/i;
+
+/** Normalised labels for source tags */
+export const SOURCE_LABELS: Record<string, string> = {
+  "bluray":  "Bluray",
+  "blu-ray": "Bluray",
+  "remux":   "Remux",
+  "web-dl":  "WEBDL",
+  "webdl":   "WEBDL",
+  "web-rip": "WEBRip",
+  "webrip":  "WEBRip",
+  "hdtv":    "HDTV",
+  "bdrip":   "BDRip",
+  "bd-rip":  "BDRip",
+  "brrip":   "BDRip",
+  "br-rip":  "BDRip",
+  "dvdrip":  "DVDRip",
+  "dvd-rip": "DVDRip",
+  "hdrip":   "HDRip"
+};
+
+/** Regex to detect HDR / Dolby Vision / HDR10+ dynamic range tags */
+export const HDR_TAG_RE = /\b(HDR10\+|HDR10|HDR|DV|DoVi|Dolby[\s.]?Vision)(?=[.\s\-)]|$)/i;
+
+/** Normalised labels for HDR tags */
+export const HDR_LABELS: Record<string, string> = {
+  "hdr":            "HDR",
+  "hdr10":          "HDR10",
+  "hdr10+":         "HDR10+",
+  "dv":             "DV",
+  "dovi":           "DV",
+  "dolby vision":   "DV",
+  "dolby.vision":   "DV",
+  "dolbyvision":    "DV"
+};
+
+// ── Compression / Transcode (experimental) ─────────────────────────
+
+/**
+ * ROM extensions that compress well in standard zip/7z archives.
+ * These are typically cartridge-based ROM formats with raw data.
+ */
+export const COMPRESSIBLE_ROM_EXTS = new Set([
+  ".nes", ".fds", ".sfc", ".smc", ".gb", ".gbc", ".gba",
+  ".nds", ".n64", ".z64", ".v64",
+  ".gen", ".sms", ".gg", ".32x", ".pce",
+  ".a26", ".a78"
+]);
+
+/**
+ * Disc-based ROM extensions best compressed with CHD (MAME Compressed Hunks of Data)
+ * or similar disc-aware formats. Standard zip gives poor results on these.
+ */
+export const DISC_ROM_EXTS = new Set([
+  ".iso", ".bin", ".img", ".cue", ".gdi", ".cdi",
+  ".wbfs", ".gcm", ".rvz", ".wad",
+  ".pbp"
+]);
+
+/** Video transcode presets for experimental compression (FFmpeg-based) */
+export interface TranscodePreset {
+  /** Human-readable name */
+  label: string;
+  /** Short description */
+  description: string;
+  /** FFmpeg output options (appended after input) */
+  ffmpegArgs: string[];
+  /** Expected output extension */
+  outputExt: string;
+}
+
+export const TRANSCODE_PRESETS: Record<string, TranscodePreset> = {
+  hevc_medium: {
+    label: "HEVC Medium (CRF 22)",
+    description: "Good quality, ~50% size reduction. Widely compatible.",
+    ffmpegArgs: ["-c:v", "libx265", "-crf", "22", "-preset", "medium", "-c:a", "copy"],
+    outputExt: ".mkv"
+  },
+  hevc_small: {
+    label: "HEVC Smaller (CRF 26)",
+    description: "Smaller files, slight quality loss. Good for archiving.",
+    ffmpegArgs: ["-c:v", "libx265", "-crf", "26", "-preset", "medium", "-c:a", "copy"],
+    outputExt: ".mkv"
+  },
+  av1_quality: {
+    label: "AV1 Quality (CRF 30)",
+    description: "Best compression, very slow. For long-term archiving.",
+    ffmpegArgs: ["-c:v", "libsvtav1", "-crf", "30", "-preset", "6", "-c:a", "copy"],
+    outputExt: ".mkv"
+  },
+  copy_mkv: {
+    label: "Remux to MKV (no re-encode)",
+    description: "Container swap only. Lossless, instant, no quality change.",
+    ffmpegArgs: ["-c", "copy"],
+    outputExt: ".mkv"
+  }
+};
+
+/**
  * Extensions recognised as TV/movie video files.
  * Excludes legacy/specialised formats (.flv, .mpg, .mpeg, .3gp, .ogv, .vob)
  * that are rarely found in modern TV/movie libraries.
