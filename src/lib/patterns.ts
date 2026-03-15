@@ -13,6 +13,9 @@ import {
   BOOK_EXTENSIONS,
   DOC_EXTENSIONS,
   ROM_EXTENSIONS,
+  COMIC_EXTENSIONS,
+  PODCAST_EXTENSIONS,
+  YOUTUBE_EXTENSIONS,
   PLATFORM_MAP
 } from "./config.js";
 
@@ -20,10 +23,15 @@ export enum MediaType {
   JELLYFIN_TV = "jellyfin_tv",
   JELLYFIN_MOVIE = "jellyfin_movie",
   JELLYFIN_MOVIE_VERSION = "jellyfin_movie_version",
+  ANIME = "anime",
   PHOTOGRAPHY = "photography",
   MUSIC = "music",
   BOOKS = "books",
+  COMICS = "comics",
   GENERIC_DOCS = "generic_docs",
+  YOUTUBE_ARCHIVE = "youtube_archive",
+  PODCAST_ARCHIVE = "podcast_archive",
+  DATE_HIERARCHY = "date_hierarchy",
   EMULATION_ROMS = "emulation_roms",
   CUSTOM = "custom",
   UNKNOWN = "unknown"
@@ -72,6 +80,18 @@ export interface FileMetadata {
   hdr?: string;
   /** Full version tag combining resolution, source, and HDR (e.g. "1080p Bluray HDR") */
   versionTag?: string;
+  /** Absolute episode number (anime) */
+  absoluteEpisode?: number;
+  /** Video uploader/channel name (YouTube archive) */
+  uploader?: string;
+  /** YouTube video ID */
+  videoId?: string;
+  /** Show/podcast name (podcast archive) */
+  showName?: string;
+  /** Comic volume number */
+  volume?: number;
+  /** Comic chapter number */
+  chapter?: number;
 }
 
 export interface NamingPattern {
@@ -270,15 +290,143 @@ export const emulationRomsPattern: NamingPattern = {
   }
 };
 
+// ---------------------------------------------------------------------------
+// Anime Pattern (Jellyfin-compatible with absolute episode numbering)
+// Format: "Anime Title - S01E001 - Episode Title.ext"  (or absolute "Anime - 001.ext")
+// Folder:  "Anime Title/Season 01/"
+// Supports both SxxExx and absolute numbering for Jellyfin anime libraries.
+// ---------------------------------------------------------------------------
+export const animePattern: NamingPattern = {
+  mediaType: MediaType.ANIME,
+  label: "Anime – Absolute Episode Numbering",
+  extensions: TV_VIDEO_EXTENSIONS,
+  format(meta) {
+    const title = sanitizeFilename(meta.title ?? meta.baseName);
+    const ep = meta.absoluteEpisode ?? meta.episode ?? 1;
+    const epStr = String(ep).padStart(3, "0");
+    if (meta.season !== undefined) {
+      const s = pad(meta.season);
+      const epTitle = meta.episodeTitle ? ` - ${sanitizeFilename(meta.episodeTitle)}` : "";
+      return `${title} - S${s}E${epStr}${epTitle}${meta.ext}`;
+    }
+    const epTitle = meta.episodeTitle ? ` - ${sanitizeFilename(meta.episodeTitle)}` : "";
+    return `${title} - ${epStr}${epTitle}${meta.ext}`;
+  },
+  folderPath(meta) {
+    const title = sanitizeFilename(meta.title ?? meta.baseName);
+    const s = pad(meta.season ?? 1);
+    return `${title}/Season ${s}`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// YouTube / Video Download Archive Pattern
+// Format: "YYYY-MM-DD - Title [VideoID].ext"
+// Folder:  "Uploader/"
+// Designed for yt-dlp downloads: preserves video ID for deduplication.
+// ---------------------------------------------------------------------------
+export const youtubeArchivePattern: NamingPattern = {
+  mediaType: MediaType.YOUTUBE_ARCHIVE,
+  label: "YouTube / Download Archive",
+  extensions: YOUTUBE_EXTENSIONS,
+  format(meta) {
+    const date = meta.dateTaken ?? new Date().toISOString().slice(0, 10);
+    const title = sanitizeFilename(meta.title ?? meta.baseName);
+    const id = meta.videoId ? ` [${meta.videoId}]` : "";
+    return `${date} - ${title}${id}${meta.ext}`;
+  },
+  folderPath(meta) {
+    return sanitizeFilename(meta.uploader ?? "Unknown Channel");
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Podcast Archive Pattern
+// Format: "Show Name - YYYY-MM-DD - Episode Title.ext"
+// Folder:  "Show Name/"
+// ---------------------------------------------------------------------------
+export const podcastArchivePattern: NamingPattern = {
+  mediaType: MediaType.PODCAST_ARCHIVE,
+  label: "Podcast Archive – Show / Episode",
+  extensions: PODCAST_EXTENSIONS,
+  format(meta) {
+    const show = sanitizeFilename(meta.showName ?? meta.title ?? meta.baseName);
+    const date = meta.dateTaken ?? new Date().toISOString().slice(0, 10);
+    const epTitle = meta.episodeTitle ? ` - ${sanitizeFilename(meta.episodeTitle)}` : "";
+    return `${show} - ${date}${epTitle}${meta.ext}`;
+  },
+  folderPath(meta) {
+    return sanitizeFilename(meta.showName ?? meta.title ?? "Unknown Show");
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Comic / Manga Pattern (Kavita / ComicRack-compatible)
+// Format: "Series Name Vol 01 Ch 001.ext"
+// Folder:  "Series Name/Volume 01/"
+// Kavita docs: Series/Volume NN/filename.cbz
+// ---------------------------------------------------------------------------
+export const comicMangaPattern: NamingPattern = {
+  mediaType: MediaType.COMICS,
+  label: "Comics / Manga – Kavita-compatible",
+  extensions: COMIC_EXTENSIONS,
+  format(meta) {
+    const series = sanitizeFilename(meta.title ?? meta.baseName);
+    const vol = meta.volume !== undefined ? ` Vol ${pad(meta.volume)}` : "";
+    const ch = meta.chapter !== undefined ? ` Ch ${String(meta.chapter).padStart(3, "0")}` : "";
+    return `${series}${vol}${ch}${meta.ext}`;
+  },
+  folderPath(meta) {
+    const series = sanitizeFilename(meta.title ?? meta.baseName);
+    const vol = meta.volume !== undefined ? `Volume ${pad(meta.volume)}` : "Volume 01";
+    return `${series}/${vol}`;
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Date Hierarchy Pattern (ISO 8601 chronological archival)
+// Format: keeps original filename
+// Folder:  "YYYY/YYYY-MM-DD/"
+// Universal archival pattern for any file type.
+// ---------------------------------------------------------------------------
+export const dateHierarchyPattern: NamingPattern = {
+  mediaType: MediaType.DATE_HIERARCHY,
+  label: "Date Hierarchy – YYYY/MM-DD folders",
+  extensions: [
+    ...TV_VIDEO_EXTENSIONS,
+    ...PHOTO_EXTENSIONS,
+    ...MUSIC_EXTENSIONS,
+    ...BOOK_EXTENSIONS,
+    ...DOC_EXTENSIONS,
+    ...ROM_EXTENSIONS,
+    ...COMIC_EXTENSIONS,
+    ...PODCAST_EXTENSIONS
+  ].filter((v, i, a) => a.indexOf(v) === i), // deduplicate
+  format(meta) {
+    // Preserve original filename
+    return `${meta.baseName}${meta.ext}`;
+  },
+  folderPath(meta) {
+    const date = meta.dateTaken ?? new Date().toISOString().slice(0, 10);
+    const year = date.slice(0, 4);
+    return `${year}/${date}`;
+  }
+};
+
 /** All available patterns, ordered for UI display */
 export const ALL_PATTERNS: NamingPattern[] = [
   jellyfinTvPattern,
   jellyfinMoviePattern,
   jellyfinMovieVersionPattern,
+  animePattern,
   photographyPattern,
   musicPattern,
   booksPattern,
+  comicMangaPattern,
   genericDocsPattern,
+  youtubeArchivePattern,
+  podcastArchivePattern,
+  dateHierarchyPattern,
   emulationRomsPattern
 ];
 
@@ -292,7 +440,8 @@ export function getPattern(mediaType: MediaType): NamingPattern | undefined {
 // Tokens: {title}, {season}, {episode}, {episodeTitle}, {year}, {artist},
 //         {track}, {song}, {date}, {location}, {index}, {ext}, {baseName},
 //         {platform}, {region}, {resolution}, {album}, {source}, {hdr},
-//         {versionTag}
+//         {versionTag}, {uploader}, {videoId}, {showName}, {volume},
+//         {chapter}, {absoluteEpisode}
 // ---------------------------------------------------------------------------
 
 /**
@@ -302,27 +451,33 @@ export function getPattern(mediaType: MediaType): NamingPattern | undefined {
 export function applyTemplate(template: string, meta: FileMetadata): string {
   return template.replace(/\{(\w+)\}/g, (_match, token: string) => {
     switch (token) {
-      case "title":        return sanitizeFilename(meta.title ?? meta.baseName);
-      case "season":       return meta.season !== undefined ? pad(meta.season) : "";
-      case "episode":      return meta.episode !== undefined ? pad(meta.episode) : "";
-      case "episodeTitle": return meta.episodeTitle ? sanitizeFilename(meta.episodeTitle) : "";
-      case "year":         return meta.year !== undefined ? String(meta.year) : "";
-      case "artist":       return meta.artist ? sanitizeFilename(meta.artist) : "";
-      case "track":        return meta.trackNumber !== undefined ? pad(meta.trackNumber) : "";
-      case "song":         return meta.songTitle ? sanitizeFilename(meta.songTitle) : "";
-      case "date":         return meta.dateTaken ?? "";
-      case "location":     return meta.location ? sanitizeFilename(meta.location) : "";
-      case "index":        return meta.index !== undefined ? pad(meta.index, 3) : "";
-      case "ext":          return meta.ext;
-      case "baseName":     return sanitizeFilename(meta.baseName);
-      case "platform":     return meta.platform ? sanitizeFilename(meta.platform) : "";
-      case "region":       return meta.region ? sanitizeFilename(meta.region) : "";
-      case "resolution":   return meta.resolution ?? "";
-      case "album":        return meta.album ? sanitizeFilename(meta.album) : "";
-      case "source":       return meta.source ?? "";
-      case "hdr":          return meta.hdr ?? "";
-      case "versionTag":   return meta.versionTag ?? "";
-      default:             return `{${token}}`;
+      case "title":           return sanitizeFilename(meta.title ?? meta.baseName);
+      case "season":          return meta.season !== undefined ? pad(meta.season) : "";
+      case "episode":         return meta.episode !== undefined ? pad(meta.episode) : "";
+      case "episodeTitle":    return meta.episodeTitle ? sanitizeFilename(meta.episodeTitle) : "";
+      case "year":            return meta.year !== undefined ? String(meta.year) : "";
+      case "artist":          return meta.artist ? sanitizeFilename(meta.artist) : "";
+      case "track":           return meta.trackNumber !== undefined ? pad(meta.trackNumber) : "";
+      case "song":            return meta.songTitle ? sanitizeFilename(meta.songTitle) : "";
+      case "date":            return meta.dateTaken ?? "";
+      case "location":        return meta.location ? sanitizeFilename(meta.location) : "";
+      case "index":           return meta.index !== undefined ? pad(meta.index, 3) : "";
+      case "ext":             return meta.ext;
+      case "baseName":        return sanitizeFilename(meta.baseName);
+      case "platform":        return meta.platform ? sanitizeFilename(meta.platform) : "";
+      case "region":          return meta.region ? sanitizeFilename(meta.region) : "";
+      case "resolution":      return meta.resolution ?? "";
+      case "album":           return meta.album ? sanitizeFilename(meta.album) : "";
+      case "source":          return meta.source ?? "";
+      case "hdr":             return meta.hdr ?? "";
+      case "versionTag":      return meta.versionTag ?? "";
+      case "uploader":        return meta.uploader ? sanitizeFilename(meta.uploader) : "";
+      case "videoId":         return meta.videoId ?? "";
+      case "showName":        return meta.showName ? sanitizeFilename(meta.showName) : "";
+      case "volume":          return meta.volume !== undefined ? pad(meta.volume) : "";
+      case "chapter":         return meta.chapter !== undefined ? String(meta.chapter).padStart(3, "0") : "";
+      case "absoluteEpisode": return meta.absoluteEpisode !== undefined ? String(meta.absoluteEpisode).padStart(3, "0") : "";
+      default:                return `{${token}}`;
     }
   });
 }
@@ -341,7 +496,10 @@ export function createCustomPattern(template: string): NamingPattern {
     ...MUSIC_EXTENSIONS,
     ...BOOK_EXTENSIONS,
     ...DOC_EXTENSIONS,
-    ...ROM_EXTENSIONS
+    ...ROM_EXTENSIONS,
+    ...COMIC_EXTENSIONS,
+    ...PODCAST_EXTENSIONS,
+    ...YOUTUBE_EXTENSIONS
   ];
   // Deduplicate
   const extensions = [...new Set(allExtensions)];

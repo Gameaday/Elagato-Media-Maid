@@ -8,10 +8,15 @@ import {
   jellyfinTvPattern,
   jellyfinMoviePattern,
   jellyfinMovieVersionPattern,
+  animePattern,
   photographyPattern,
   musicPattern,
   booksPattern,
+  comicMangaPattern,
   genericDocsPattern,
+  youtubeArchivePattern,
+  podcastArchivePattern,
+  dateHierarchyPattern,
   emulationRomsPattern,
   getPattern,
   ALL_PATTERNS,
@@ -231,8 +236,8 @@ describe("getPattern", () => {
 });
 
 describe("ALL_PATTERNS", () => {
-  it("contains exactly 8 patterns", () => {
-    expect(ALL_PATTERNS).toHaveLength(8);
+  it("contains exactly 13 patterns", () => {
+    expect(ALL_PATTERNS).toHaveLength(13);
   });
 
   it("all patterns have non-empty extension lists", () => {
@@ -749,5 +754,401 @@ describe("jellyfinMovieVersionPattern – enhanced version tags", () => {
       versionTag: "4K Bluray Remux HDR"
     };
     expect(jellyfinMovieVersionPattern.format(meta)).toBe("Inception (2010) - [4K Bluray Remux HDR].mkv");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Anime Pattern
+// ---------------------------------------------------------------------------
+
+describe("animePattern", () => {
+  it("formats with title, season, and absolute episode", () => {
+    const meta: FileMetadata = {
+      baseName: "Naruto",
+      ext: ".mkv",
+      originalPath: "/anime/Naruto.mkv",
+      title: "Naruto",
+      season: 1,
+      absoluteEpisode: 1
+    };
+    expect(animePattern.format(meta)).toBe("Naruto - S01E001.mkv");
+  });
+
+  it("formats with absolute episode only (no season)", () => {
+    const meta: FileMetadata = {
+      baseName: "Naruto",
+      ext: ".mkv",
+      originalPath: "/anime/Naruto.mkv",
+      title: "Naruto",
+      absoluteEpisode: 42
+    };
+    expect(animePattern.format(meta)).toBe("Naruto - 042.mkv");
+  });
+
+  it("includes episode title", () => {
+    const meta: FileMetadata = {
+      baseName: "Naruto",
+      ext: ".mkv",
+      originalPath: "/anime/Naruto.mkv",
+      title: "Naruto",
+      absoluteEpisode: 1,
+      episodeTitle: "Enter Naruto Uzumaki"
+    };
+    expect(animePattern.format(meta)).toBe("Naruto - 001 - Enter Naruto Uzumaki.mkv");
+  });
+
+  it("zero-pads episode to 3 digits", () => {
+    const meta: FileMetadata = {
+      baseName: "Bleach",
+      ext: ".mkv",
+      originalPath: "/anime/Bleach.mkv",
+      title: "Bleach",
+      season: 1,
+      absoluteEpisode: 7
+    };
+    expect(animePattern.format(meta)).toBe("Bleach - S01E007.mkv");
+  });
+
+  it("generates folder path with season", () => {
+    const meta: FileMetadata = {
+      baseName: "Naruto",
+      ext: ".mkv",
+      originalPath: "/anime/Naruto.mkv",
+      title: "Naruto",
+      season: 2
+    };
+    expect(animePattern.folderPath!(meta)).toBe("Naruto/Season 02");
+  });
+
+  it("defaults to Season 01 when no season provided", () => {
+    const meta: FileMetadata = {
+      baseName: "Naruto",
+      ext: ".mkv",
+      originalPath: "/anime/Naruto.mkv",
+      title: "Naruto"
+    };
+    expect(animePattern.folderPath!(meta)).toBe("Naruto/Season 01");
+  });
+
+  it("has mediaType ANIME", () => {
+    expect(animePattern.mediaType).toBe(MediaType.ANIME);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// YouTube / Download Archive Pattern
+// ---------------------------------------------------------------------------
+
+describe("youtubeArchivePattern", () => {
+  it("formats with date, title, and video ID", () => {
+    const meta: FileMetadata = {
+      baseName: "video",
+      ext: ".mp4",
+      originalPath: "/downloads/video.mp4",
+      title: "My Video Title",
+      dateTaken: "2024-01-15",
+      videoId: "dQw4w9WgXcQ"
+    };
+    expect(youtubeArchivePattern.format(meta)).toBe("2024-01-15 - My Video Title [dQw4w9WgXcQ].mp4");
+  });
+
+  it("formats without video ID", () => {
+    const meta: FileMetadata = {
+      baseName: "video",
+      ext: ".mp4",
+      originalPath: "/downloads/video.mp4",
+      title: "My Video Title",
+      dateTaken: "2024-01-15"
+    };
+    expect(youtubeArchivePattern.format(meta)).toBe("2024-01-15 - My Video Title.mp4");
+  });
+
+  it("generates folder path from uploader", () => {
+    const meta: FileMetadata = {
+      baseName: "video",
+      ext: ".mp4",
+      originalPath: "/downloads/video.mp4",
+      uploader: "TechChannel"
+    };
+    expect(youtubeArchivePattern.folderPath!(meta)).toBe("TechChannel");
+  });
+
+  it("defaults to Unknown Channel when no uploader", () => {
+    const meta: FileMetadata = {
+      baseName: "video",
+      ext: ".mp4",
+      originalPath: "/downloads/video.mp4"
+    };
+    expect(youtubeArchivePattern.folderPath!(meta)).toBe("Unknown Channel");
+  });
+
+  it("has mediaType YOUTUBE_ARCHIVE", () => {
+    expect(youtubeArchivePattern.mediaType).toBe(MediaType.YOUTUBE_ARCHIVE);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Podcast Archive Pattern
+// ---------------------------------------------------------------------------
+
+describe("podcastArchivePattern", () => {
+  it("formats with show name, date, and episode title", () => {
+    const meta: FileMetadata = {
+      baseName: "episode",
+      ext: ".mp3",
+      originalPath: "/podcasts/episode.mp3",
+      showName: "Tech Talk",
+      dateTaken: "2024-03-10",
+      episodeTitle: "AI Revolution"
+    };
+    expect(podcastArchivePattern.format(meta)).toBe("Tech Talk - 2024-03-10 - AI Revolution.mp3");
+  });
+
+  it("formats without episode title", () => {
+    const meta: FileMetadata = {
+      baseName: "episode",
+      ext: ".mp3",
+      originalPath: "/podcasts/episode.mp3",
+      showName: "Tech Talk",
+      dateTaken: "2024-03-10"
+    };
+    expect(podcastArchivePattern.format(meta)).toBe("Tech Talk - 2024-03-10.mp3");
+  });
+
+  it("generates folder path from show name", () => {
+    const meta: FileMetadata = {
+      baseName: "episode",
+      ext: ".mp3",
+      originalPath: "/podcasts/episode.mp3",
+      showName: "Tech Talk"
+    };
+    expect(podcastArchivePattern.folderPath!(meta)).toBe("Tech Talk");
+  });
+
+  it("defaults to Unknown Show when no show name", () => {
+    const meta: FileMetadata = {
+      baseName: "episode",
+      ext: ".mp3",
+      originalPath: "/podcasts/episode.mp3"
+    };
+    expect(podcastArchivePattern.folderPath!(meta)).toBe("Unknown Show");
+  });
+
+  it("has mediaType PODCAST_ARCHIVE", () => {
+    expect(podcastArchivePattern.mediaType).toBe(MediaType.PODCAST_ARCHIVE);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Comic / Manga Pattern
+// ---------------------------------------------------------------------------
+
+describe("comicMangaPattern", () => {
+  it("formats with series, volume, and chapter", () => {
+    const meta: FileMetadata = {
+      baseName: "One Piece",
+      ext: ".cbz",
+      originalPath: "/comics/One Piece.cbz",
+      title: "One Piece",
+      volume: 1,
+      chapter: 1
+    };
+    expect(comicMangaPattern.format(meta)).toBe("One Piece Vol 01 Ch 001.cbz");
+  });
+
+  it("formats with volume only", () => {
+    const meta: FileMetadata = {
+      baseName: "Batman",
+      ext: ".cbz",
+      originalPath: "/comics/Batman.cbz",
+      title: "Batman",
+      volume: 3
+    };
+    expect(comicMangaPattern.format(meta)).toBe("Batman Vol 03.cbz");
+  });
+
+  it("formats with chapter only", () => {
+    const meta: FileMetadata = {
+      baseName: "Naruto",
+      ext: ".cbz",
+      originalPath: "/comics/Naruto.cbz",
+      title: "Naruto",
+      chapter: 42
+    };
+    expect(comicMangaPattern.format(meta)).toBe("Naruto Ch 042.cbz");
+  });
+
+  it("generates folder path with volume", () => {
+    const meta: FileMetadata = {
+      baseName: "One Piece",
+      ext: ".cbz",
+      originalPath: "/comics/One Piece.cbz",
+      title: "One Piece",
+      volume: 5
+    };
+    expect(comicMangaPattern.folderPath!(meta)).toBe("One Piece/Volume 05");
+  });
+
+  it("defaults to Volume 01 when no volume", () => {
+    const meta: FileMetadata = {
+      baseName: "Batman",
+      ext: ".cbz",
+      originalPath: "/comics/Batman.cbz",
+      title: "Batman"
+    };
+    expect(comicMangaPattern.folderPath!(meta)).toBe("Batman/Volume 01");
+  });
+
+  it("has mediaType COMICS", () => {
+    expect(comicMangaPattern.mediaType).toBe(MediaType.COMICS);
+  });
+
+  it("has comic-specific extensions", () => {
+    expect(comicMangaPattern.extensions).toContain(".cbz");
+    expect(comicMangaPattern.extensions).toContain(".cbr");
+    expect(comicMangaPattern.extensions).toContain(".cb7");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Date Hierarchy Pattern
+// ---------------------------------------------------------------------------
+
+describe("dateHierarchyPattern", () => {
+  it("preserves original filename", () => {
+    const meta: FileMetadata = {
+      baseName: "my_document",
+      ext: ".pdf",
+      originalPath: "/files/my_document.pdf"
+    };
+    expect(dateHierarchyPattern.format(meta)).toBe("my_document.pdf");
+  });
+
+  it("generates YYYY/YYYY-MM-DD folder hierarchy", () => {
+    const meta: FileMetadata = {
+      baseName: "photo",
+      ext: ".jpg",
+      originalPath: "/files/photo.jpg",
+      dateTaken: "2024-06-15"
+    };
+    expect(dateHierarchyPattern.folderPath!(meta)).toBe("2024/2024-06-15");
+  });
+
+  it("has mediaType DATE_HIERARCHY", () => {
+    expect(dateHierarchyPattern.mediaType).toBe(MediaType.DATE_HIERARCHY);
+  });
+
+  it("has broad extension support", () => {
+    expect(dateHierarchyPattern.extensions.length).toBeGreaterThan(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyTemplate – new tokens
+// ---------------------------------------------------------------------------
+
+describe("applyTemplate – new tokens", () => {
+  it("replaces {uploader} token", () => {
+    const meta: FileMetadata = {
+      baseName: "video",
+      ext: ".mp4",
+      originalPath: "/videos/video.mp4",
+      uploader: "TechChannel"
+    };
+    expect(applyTemplate("{uploader}/{title}{ext}", meta)).toBe("TechChannel/video.mp4");
+  });
+
+  it("replaces {videoId} token", () => {
+    const meta: FileMetadata = {
+      baseName: "video",
+      ext: ".mp4",
+      originalPath: "/videos/video.mp4",
+      videoId: "dQw4w9WgXcQ"
+    };
+    expect(applyTemplate("{title} [{videoId}]{ext}", meta)).toBe("video [dQw4w9WgXcQ].mp4");
+  });
+
+  it("replaces {showName} token", () => {
+    const meta: FileMetadata = {
+      baseName: "episode",
+      ext: ".mp3",
+      originalPath: "/podcasts/episode.mp3",
+      showName: "Tech Talk"
+    };
+    expect(applyTemplate("{showName}/{title}{ext}", meta)).toBe("Tech Talk/episode.mp3");
+  });
+
+  it("replaces {volume} token", () => {
+    const meta: FileMetadata = {
+      baseName: "comic",
+      ext: ".cbz",
+      originalPath: "/comics/comic.cbz",
+      volume: 3
+    };
+    expect(applyTemplate("Vol {volume}{ext}", meta)).toBe("Vol 03.cbz");
+  });
+
+  it("replaces {chapter} token", () => {
+    const meta: FileMetadata = {
+      baseName: "comic",
+      ext: ".cbz",
+      originalPath: "/comics/comic.cbz",
+      chapter: 42
+    };
+    expect(applyTemplate("Ch {chapter}{ext}", meta)).toBe("Ch 042.cbz");
+  });
+
+  it("replaces {absoluteEpisode} token", () => {
+    const meta: FileMetadata = {
+      baseName: "anime",
+      ext: ".mkv",
+      originalPath: "/anime/anime.mkv",
+      absoluteEpisode: 7
+    };
+    expect(applyTemplate("{title} - {absoluteEpisode}{ext}", meta)).toBe("anime - 007.mkv");
+  });
+
+  it("returns empty string for missing uploader", () => {
+    const meta: FileMetadata = {
+      baseName: "video",
+      ext: ".mp4",
+      originalPath: "/videos/video.mp4"
+    };
+    expect(applyTemplate("{uploader}", meta)).toBe("");
+  });
+
+  it("returns empty string for missing videoId", () => {
+    const meta: FileMetadata = {
+      baseName: "video",
+      ext: ".mp4",
+      originalPath: "/videos/video.mp4"
+    };
+    expect(applyTemplate("{videoId}", meta)).toBe("");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getPattern – new media types
+// ---------------------------------------------------------------------------
+
+describe("getPattern – new types", () => {
+  it("finds anime pattern", () => {
+    expect(getPattern(MediaType.ANIME)).toBe(animePattern);
+  });
+
+  it("finds youtube archive pattern", () => {
+    expect(getPattern(MediaType.YOUTUBE_ARCHIVE)).toBe(youtubeArchivePattern);
+  });
+
+  it("finds podcast archive pattern", () => {
+    expect(getPattern(MediaType.PODCAST_ARCHIVE)).toBe(podcastArchivePattern);
+  });
+
+  it("finds comic pattern", () => {
+    expect(getPattern(MediaType.COMICS)).toBe(comicMangaPattern);
+  });
+
+  it("finds date hierarchy pattern", () => {
+    expect(getPattern(MediaType.DATE_HIERARCHY)).toBe(dateHierarchyPattern);
   });
 });

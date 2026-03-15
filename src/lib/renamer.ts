@@ -12,7 +12,7 @@ import { MediaType } from "./patterns.js";
 import { findAndParseNfo } from "./nfo-parser.js";
 import { logOperation } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
-import { validateFolderPath, RELEASE_TAG_RE, ROM_TAG_RE, ROM_REGION_RE, PLATFORM_MAP, RESOLUTION_RE, RESOLUTION_LABELS, SOURCE_TAG_RE, SOURCE_LABELS, HDR_TAG_RE, HDR_LABELS } from "./config.js";
+import { validateFolderPath, RELEASE_TAG_RE, ROM_TAG_RE, ROM_REGION_RE, PLATFORM_MAP, RESOLUTION_RE, RESOLUTION_LABELS, SOURCE_TAG_RE, SOURCE_LABELS, HDR_TAG_RE, HDR_LABELS, YOUTUBE_ID_RE, ABSOLUTE_EPISODE_RE, COMIC_VOLUME_RE, COMIC_CHAPTER_RE } from "./config.js";
 
 export interface RenameOperation {
   /** Original full path */
@@ -227,6 +227,172 @@ export function parseRomPattern(baseName: string, ext: string): Partial<FileMeta
 }
 
 /**
+ * Parse YouTube / yt-dlp download metadata from a filename.
+ * Handles formats like:
+ *   "Video Title [dQw4w9WgXcQ].mp4"
+ *   "Channel - Video Title [dQw4w9WgXcQ].mp4"
+ *   "20230615 Video Title [dQw4w9WgXcQ].webm"
+ */
+export function parseYoutubePattern(baseName: string): Partial<FileMetadata> {
+  const meta: Partial<FileMetadata> = {};
+
+  // Extract video ID from [ID] at end
+  const idMatch = YOUTUBE_ID_RE.exec(baseName);
+  if (idMatch) {
+    meta.videoId = idMatch[1];
+  }
+
+  // Remove the video ID bracket from the title
+  let cleaned = baseName.replace(/\s*\[[A-Za-z0-9_-]{11}\]$/, "").trim();
+
+  // Try to extract uploader/channel from "Channel - Title" format
+  const channelMatch = /^(.+?)\s*-\s+(.+)$/.exec(cleaned);
+  if (channelMatch) {
+    meta.uploader = channelMatch[1].trim();
+    meta.title = channelMatch[2].trim();
+  } else {
+    meta.title = cleaned;
+  }
+
+  // Try to extract date from YYYYMMDD prefix
+  const datePrefix = /^(\d{4})(\d{2})(\d{2})\s+/.exec(cleaned);
+  if (datePrefix) {
+    meta.dateTaken = `${datePrefix[1]}-${datePrefix[2]}-${datePrefix[3]}`;
+    meta.title = cleaned.replace(/^\d{8}\s+/, "").trim();
+  }
+
+  return meta;
+}
+
+/**
+ * Parse anime metadata from a filename.
+ * Handles formats like:
+ *   "[SubGroup] Anime Title - 01 [1080p].mkv"
+ *   "Anime Title - 001 - Episode Title.mkv"
+ *   "Anime.Title.S01E001.Episode.Title.mkv"
+ */
+export function parseAnimePattern(baseName: string): Partial<FileMetadata> {
+  const meta: Partial<FileMetadata> = {};
+
+  // Strip fansub group tags: [SubGroup]
+  let cleaned = baseName.replace(/^\[([^\]]+)\]\s*/, "");
+
+  // Strip trailing quality tags: [1080p], [720p], etc.
+  cleaned = cleaned.replace(/\s*\[\d+p\]$/, "").trim();
+
+  // Try SxxExx pattern first
+  const seMatch = /^(.*?)[.\s_-]+[Ss](\d{1,2})[Ee](\d{1,4})(?:[.\s_-]+(.+))?$/.exec(cleaned);
+  if (seMatch) {
+    meta.title = seMatch[1].replace(/[._]/g, " ").trim();
+    meta.season = parseInt(seMatch[2], 10);
+    meta.absoluteEpisode = parseInt(seMatch[3], 10);
+    meta.episode = meta.absoluteEpisode;
+    if (seMatch[4]) {
+      meta.episodeTitle = seMatch[4].replace(/[._]/g, " ").replace(RELEASE_TAG_RE, "").trim();
+    }
+    return meta;
+  }
+
+  // Absolute numbering: "Title - 001" or "Title - 001 - Episode Title"
+  const absMatch = ABSOLUTE_EPISODE_RE.exec(cleaned);
+  if (absMatch) {
+    meta.absoluteEpisode = parseInt(absMatch[1], 10);
+    meta.episode = meta.absoluteEpisode;
+    // Extract title (everything before the episode number pattern)
+    const titlePart = cleaned.slice(0, absMatch.index).replace(/[.\s_-]+$/, "").replace(/[._]/g, " ").trim();
+    if (titlePart) meta.title = titlePart;
+    // Extract episode title (everything after the episode number)
+    const afterEp = cleaned.slice(absMatch.index + absMatch[0].length).replace(/^[.\s_-]+/, "").replace(/[._]/g, " ").replace(RELEASE_TAG_RE, "").trim();
+    if (afterEp) meta.episodeTitle = afterEp;
+  }
+
+  return meta;
+}
+
+/**
+ * Parse podcast metadata from a filename.
+ * Handles formats like:
+ *   "Show Name - 2024-01-15 - Episode Title.mp3"
+ *   "Show Name - Episode Title.mp3"
+ *   "2024-01-15 - Episode Title.mp3"
+ */
+export function parsePodcastPattern(baseName: string): Partial<FileMetadata> {
+  const meta: Partial<FileMetadata> = {};
+
+  // Try: "Show - YYYY-MM-DD - Episode" or "Show - YYYY-MM-DD"
+  const fullMatch = /^(.+?)\s*-\s*(\d{4}-\d{2}-\d{2})\s*-\s*(.+)$/.exec(baseName);
+  if (fullMatch) {
+    meta.showName = fullMatch[1].trim();
+    meta.dateTaken = fullMatch[2];
+    meta.episodeTitle = fullMatch[3].trim();
+    return meta;
+  }
+
+  // Try: "Show - YYYY-MM-DD"
+  const showDateMatch = /^(.+?)\s*-\s*(\d{4}-\d{2}-\d{2})$/.exec(baseName);
+  if (showDateMatch) {
+    meta.showName = showDateMatch[1].trim();
+    meta.dateTaken = showDateMatch[2];
+    return meta;
+  }
+
+  // Try: "YYYY-MM-DD - Episode Title"
+  const dateEpMatch = /^(\d{4}-\d{2}-\d{2})\s*-\s*(.+)$/.exec(baseName);
+  if (dateEpMatch) {
+    meta.dateTaken = dateEpMatch[1];
+    meta.episodeTitle = dateEpMatch[2].trim();
+    return meta;
+  }
+
+  // Try: "Show - Episode Title"
+  const showEpMatch = /^(.+?)\s*-\s*(.+)$/.exec(baseName);
+  if (showEpMatch) {
+    meta.showName = showEpMatch[1].trim();
+    meta.episodeTitle = showEpMatch[2].trim();
+    return meta;
+  }
+
+  return meta;
+}
+
+/**
+ * Parse comic/manga metadata from a filename.
+ * Handles formats like:
+ *   "One Piece Vol 01 Ch 001.cbz"
+ *   "Batman #042.cbz"
+ *   "Spider-Man v3 #15.cbz"
+ *   "Naruto Chapter 100.cbz"
+ */
+export function parseComicPattern(baseName: string): Partial<FileMetadata> {
+  const meta: Partial<FileMetadata> = {};
+
+  // Extract volume
+  const volMatch = COMIC_VOLUME_RE.exec(baseName);
+  if (volMatch) {
+    meta.volume = parseInt(volMatch[1], 10);
+  }
+
+  // Extract chapter
+  const chMatch = COMIC_CHAPTER_RE.exec(baseName);
+  if (chMatch) {
+    meta.chapter = parseInt(chMatch[1], 10);
+  }
+
+  // Extract title: everything before the first vol/chapter/issue marker
+  let title = baseName
+    .replace(COMIC_VOLUME_RE, "")
+    .replace(COMIC_CHAPTER_RE, "")
+    .replace(/#\d+/, "")
+    .replace(/[._]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (title) meta.title = title;
+
+  return meta;
+}
+
+/**
  * Build FileMetadata from a filename and any NFO data.
  * NFO data takes precedence over filename parsing.
  * Selects the appropriate parser based on the target pattern's media type.
@@ -247,14 +413,22 @@ async function buildMetadata(
   const isRomPattern = pattern.mediaType === MediaType.EMULATION_ROMS;
   const isMoviePattern = pattern.mediaType === MediaType.JELLYFIN_MOVIE
     || pattern.mediaType === MediaType.JELLYFIN_MOVIE_VERSION;
+  const isAnimePattern = pattern.mediaType === MediaType.ANIME;
+  const isYoutubePattern = pattern.mediaType === MediaType.YOUTUBE_ARCHIVE;
+  const isPodcastPattern = pattern.mediaType === MediaType.PODCAST_ARCHIVE;
+  const isComicPattern = pattern.mediaType === MediaType.COMICS;
 
   const fromTv = isTvPattern ? parseTvPattern(baseName) : {};
   const fromMusic = isMusicPattern ? parseMusicPattern(baseName) : {};
   const fromRom = isRomPattern ? parseRomPattern(baseName, ext) : {};
+  const fromAnime = isAnimePattern ? parseAnimePattern(baseName) : {};
+  const fromYoutube = isYoutubePattern ? parseYoutubePattern(baseName) : {};
+  const fromPodcast = isPodcastPattern ? parsePodcastPattern(baseName) : {};
+  const fromComic = isComicPattern ? parseComicPattern(baseName) : {};
 
   // For movie/photo/book/doc patterns, try TV parsing only for
   // season/episode extraction (useful for metadata) when not music or ROM
-  const fromTvFallback = !isMusicPattern && !isTvPattern && !isRomPattern ? parseTvPattern(baseName) : {};
+  const fromTvFallback = !isMusicPattern && !isTvPattern && !isRomPattern && !isAnimePattern && !isYoutubePattern && !isPodcastPattern && !isComicPattern ? parseTvPattern(baseName) : {};
 
   // For movie patterns, extract a clean title from the filename
   const movieTitle = isMoviePattern ? parseMovieTitle(baseName) : undefined;
@@ -264,10 +438,10 @@ async function buildMetadata(
     baseName,
     ext,
     originalPath: filePath,
-    title: nfoMeta.title ?? fromTv.title ?? fromRom.title ?? movieTitle ?? fromTvFallback.title ?? baseName,
-    season: nfoMeta.season ?? fromTv.season ?? fromTvFallback.season,
-    episode: nfoMeta.episode ?? fromTv.episode ?? fromTvFallback.episode,
-    episodeTitle: nfoMeta.episodeTitle ?? fromTv.episodeTitle ?? fromTvFallback.episodeTitle,
+    title: nfoMeta.title ?? fromTv.title ?? fromAnime.title ?? fromComic.title ?? fromYoutube.title ?? fromPodcast.showName ?? fromRom.title ?? movieTitle ?? fromTvFallback.title ?? baseName,
+    season: nfoMeta.season ?? fromTv.season ?? fromAnime.season ?? fromTvFallback.season,
+    episode: nfoMeta.episode ?? fromTv.episode ?? fromAnime.episode ?? fromTvFallback.episode,
+    episodeTitle: nfoMeta.episodeTitle ?? fromTv.episodeTitle ?? fromAnime.episodeTitle ?? fromPodcast.episodeTitle ?? fromTvFallback.episodeTitle,
     year: nfoMeta.year ?? parseYearFromFilename(baseName),
     artist: nfoMeta.artist ?? fromMusic.artist,
     album: nfoMeta.album,
@@ -279,7 +453,14 @@ async function buildMetadata(
     resolution: parseResolutionFromFilename(baseName),
     source: parseSourceFromFilename(baseName),
     hdr: parseHdrFromFilename(baseName),
-    versionTag: buildVersionTag(baseName)
+    versionTag: buildVersionTag(baseName),
+    absoluteEpisode: fromAnime.absoluteEpisode,
+    uploader: fromYoutube.uploader,
+    videoId: fromYoutube.videoId,
+    showName: fromPodcast.showName,
+    volume: fromComic.volume,
+    chapter: fromComic.chapter,
+    dateTaken: fromYoutube.dateTaken ?? fromPodcast.dateTaken
   };
 
   return merged;

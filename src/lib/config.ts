@@ -62,6 +62,24 @@ export const EBOOK_EXTS = new Set([
   ".epub", ".mobi", ".azw", ".azw3", ".cbz", ".cbr", ".fb2", ".lit"
 ]);
 
+/**
+ * Comic/manga archive extensions.
+ * CBZ/CBR are shared with EBOOK_EXTS; these are the full comic set including
+ * CB7 and CBT (7-zip and tar comic archives) used by Kavita/ComicRack.
+ */
+export const COMIC_EXTS = new Set([
+  ".cbz", ".cbr", ".cb7", ".cbt", ".pdf", ".epub"
+]);
+
+/**
+ * Podcast / audio-show extensions.
+ * Subset of AUDIO_EXTS plus video podcasts (mp4).
+ */
+export const PODCAST_EXTS = new Set([
+  ".mp3", ".m4a", ".ogg", ".opus", ".aac", ".flac", ".wav",
+  ".mp4", ".m4v", ".webm"
+]);
+
 export const DOCUMENT_EXTS = new Set([
   ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
   ".txt", ".md", ".csv", ".rtf", ".odt", ".ods", ".odp", ".pages", ".numbers"
@@ -265,6 +283,21 @@ export const BOOK_EXTENSIONS = Array.from(EBOOK_EXTS);
 /** Extensions recognised for generic document patterns */
 export const DOC_EXTENSIONS = Array.from(DOCUMENT_EXTS);
 
+/** Extensions recognised for comic/manga patterns */
+export const COMIC_EXTENSIONS = Array.from(COMIC_EXTS);
+
+/** Extensions recognised for podcast patterns */
+export const PODCAST_EXTENSIONS = Array.from(PODCAST_EXTS);
+
+/**
+ * Extensions for YouTube / video-download archive patterns.
+ * Includes video and audio-only downloads.
+ */
+export const YOUTUBE_EXTENSIONS = [
+  ...Array.from(VIDEO_EXTS),
+  ...Array.from(AUDIO_EXTS)
+];
+
 /** Extensions recognised for emulation ROM patterns */
 export const ROM_EXTENSIONS = Array.from(ROM_EXTS);
 
@@ -298,6 +331,7 @@ export const SORT_CATEGORIES: SortCategory[] = [
   { folder: "Audio", extensions: AUDIO_EXTS },
   { folder: "Documents", extensions: DOCUMENT_EXTS },
   { folder: "eBooks", extensions: EBOOK_EXTS },
+  { folder: "Comics", extensions: COMIC_EXTS },
   { folder: "Installers", extensions: INSTALLER_EXTS },
   { folder: "Archives", extensions: ARCHIVE_EXTS },
   { folder: "ROMs", extensions: ROM_EXTS },
@@ -317,6 +351,34 @@ CATEGORY_MAP["NFO"] = NFO_EXTS;
 /** Standard SxxExx / NxNN and related TV patterns for detection */
 export const TV_EPISODE_RE =
   /[Ss]\d{1,2}[Ee]\d{1,2}|[Ss]eason\s*\d|[Ee]pisode\s*\d|\b\d{1,2}x\d{2}\b/;
+
+/**
+ * Regex to detect YouTube video IDs in yt-dlp naming patterns.
+ * yt-dlp default: "Title [VIDEO_ID].ext"
+ * Captures the 11-character ID inside square brackets.
+ */
+export const YOUTUBE_ID_RE = /\[([A-Za-z0-9_-]{11})\](?:\.[^.]+)?$/;
+
+/**
+ * Regex to detect absolute episode numbering (common in anime).
+ * Matches patterns like " - 001", " - 01", "E001", "EP01", "Episode 01".
+ * Group 1 captures the number.
+ */
+export const ABSOLUTE_EPISODE_RE = /(?:\s-\s|[Ee][Pp]?)(\d{2,4})(?:[.\s_-]|$)/;
+
+/**
+ * Regex to detect comic/manga volume numbering.
+ * Matches Vol 01, Volume 01, v01, Vol.01.
+ * Group 1 captures the number.
+ */
+export const COMIC_VOLUME_RE = /\b[Vv](?:ol(?:ume)?)?\.?\s*(\d{1,3})\b/;
+
+/**
+ * Regex to detect comic/manga chapter numbering.
+ * Matches Ch 01, Chapter 01, c01, Ch.01, #01.
+ * Group 1 captures the number.
+ */
+export const COMIC_CHAPTER_RE = /(?:[Cc](?:h(?:apter)?)?\.?\s*|#)(\d{1,4})\b/;
 
 /** Regex to strip ROM scene/dump tags like [!], [b], [h1], [o2] from filenames */
 export const ROM_TAG_RE = /\s*\[[\w!]+\]/g;

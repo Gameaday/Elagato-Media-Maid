@@ -23,6 +23,7 @@
         <strong>Audio</strong> · mp3, flac, aac, ogg, wav, m4a…<br>
         <strong>Documents</strong> · pdf, doc, docx, xls, txt, md…<br>
         <strong>eBooks</strong> · epub, mobi, azw, cbz, cbr…<br>
+        <strong>Comics</strong> · cbz, cbr, cb7, cbt, pdf…<br>
         <strong>Installers</strong> · exe, msi, dmg, pkg, iso…<br>
         <strong>Archives</strong> · zip, rar, 7z, tar, gz…<br>
         <strong>ROMs</strong> · nes, sfc, gba, n64, nds, gen…<br>
@@ -53,6 +54,14 @@
     </div>
 
     <div class="sdpi-item">
+      <label class="sdpi-item-check">
+        <input type="checkbox" id="generateChecksums">
+        Generate SHA-256 checksums
+      </label>
+      <div class="sdpi-info">Create checksums.sha256 manifests in sorted folders for archival integrity verification.</div>
+    </div>
+
+    <div class="sdpi-item">
       <label class="sdpi-item-label" for="transcodePreset">Video Compression</label>
       <select id="transcodePreset">
         <option value="none">None (default)</option>
@@ -79,6 +88,7 @@
     const createOtherEl     = document.getElementById("createOtherFolder");
     const pathStatusEl      = document.getElementById("pathStatus");
     const compressRomsEl    = document.getElementById("compressRoms");
+    const generateChecksumsEl = document.getElementById("generateChecksums");
     const transcodePresetEl = document.getElementById("transcodePreset");
 
     function validatePath() {
@@ -97,6 +107,7 @@
       if (s.folderPath !== undefined) folderPathEl.value = s.folderPath;
       if (s.createOtherFolder !== undefined) createOtherEl.checked = s.createOtherFolder;
       if (s.compressRoms !== undefined) compressRomsEl.checked = s.compressRoms;
+      if (s.generateChecksums !== undefined) generateChecksumsEl.checked = s.generateChecksums;
       if (s.transcodePreset !== undefined) transcodePresetEl.value = s.transcodePreset;
       validatePath();
     }
@@ -107,8 +118,9 @@
         payload: {
           folderPath:        folderPathEl.value.trim(),
           createOtherFolder: createOtherEl.checked,
-          compressRoms:      compressRomsEl.checked,
-          transcodePreset:   transcodePresetEl.value
+          compressRoms:       compressRomsEl.checked,
+          generateChecksums:  generateChecksumsEl.checked,
+          transcodePreset:    transcodePresetEl.value
         }
       });
     }
@@ -132,6 +144,7 @@
       folderPathEl.addEventListener("input", () => { validatePath(); saveSettings(); });
       createOtherEl.addEventListener("change", saveSettings);
       compressRomsEl.addEventListener("change", saveSettings);
+      generateChecksumsEl.addEventListener("change", saveSettings);
       transcodePresetEl.addEventListener("change", saveSettings);
     }
   </script>

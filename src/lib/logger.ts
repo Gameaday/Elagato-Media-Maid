@@ -9,7 +9,7 @@ import { appendFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 
-export type OperationType = "rename" | "move" | "mkdir" | "sort" | "write" | "undo" | "dryrun" | "error" | "compress" | "transcode";
+export type OperationType = "rename" | "move" | "mkdir" | "sort" | "write" | "undo" | "dryrun" | "error" | "compress" | "transcode" | "checksum" | "verify";
 
 export interface LogEntry {
   timestamp: string;

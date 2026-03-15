@@ -8,7 +8,7 @@ import { join } from "path";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 
-import { parseTvPattern, parseYearFromFilename, parseRomPattern, parseResolutionFromFilename, parseMovieTitle, parseSourceFromFilename, parseHdrFromFilename, buildVersionTag, renameFolder } from "../src/lib/renamer";
+import { parseTvPattern, parseYearFromFilename, parseRomPattern, parseResolutionFromFilename, parseMovieTitle, parseSourceFromFilename, parseHdrFromFilename, buildVersionTag, parseYoutubePattern, parseAnimePattern, parsePodcastPattern, parseComicPattern, renameFolder } from "../src/lib/renamer";
 import { jellyfinTvPattern, jellyfinMoviePattern, jellyfinMovieVersionPattern, emulationRomsPattern } from "../src/lib/patterns";
 
 // ---------------------------------------------------------------------------
@@ -546,5 +546,131 @@ describe("renameFolder – enhanced multi-version tags", () => {
     const result = await renameFolder(tmpDir, jellyfinMovieVersionPattern, true);
     const name = result.operations[0].to.split("/").pop() ?? "";
     expect(name).toContain("[4K Remux HDR]");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseYoutubePattern
+// ---------------------------------------------------------------------------
+describe("parseYoutubePattern", () => {
+  it("extracts video ID from yt-dlp naming", () => {
+    const meta = parseYoutubePattern("My Cool Video [dQw4w9WgXcQ]");
+    expect(meta.videoId).toBe("dQw4w9WgXcQ");
+    expect(meta.title).toBe("My Cool Video");
+  });
+
+  it("extracts channel and title from Channel - Title format", () => {
+    const meta = parseYoutubePattern("Tech Channel - How to Code [abc123DEF-_]");
+    expect(meta.uploader).toBe("Tech Channel");
+    expect(meta.title).toBe("How to Code");
+    expect(meta.videoId).toBe("abc123DEF-_");
+  });
+
+  it("extracts date from YYYYMMDD prefix", () => {
+    const meta = parseYoutubePattern("20240115 My Video [dQw4w9WgXcQ]");
+    expect(meta.dateTaken).toBe("2024-01-15");
+    expect(meta.videoId).toBe("dQw4w9WgXcQ");
+  });
+
+  it("handles filename without video ID", () => {
+    const meta = parseYoutubePattern("Some Random Video");
+    expect(meta.videoId).toBeUndefined();
+    expect(meta.title).toBe("Some Random Video");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseAnimePattern
+// ---------------------------------------------------------------------------
+describe("parseAnimePattern", () => {
+  it("parses fansub format [Group] Title - 01", () => {
+    const meta = parseAnimePattern("[SubGroup] Naruto - 42");
+    expect(meta.title).toBe("Naruto");
+    expect(meta.absoluteEpisode).toBe(42);
+  });
+
+  it("parses SxxExx format", () => {
+    const meta = parseAnimePattern("Attack.on.Titan.S01E025.Episode.Title");
+    expect(meta.title).toBe("Attack on Titan");
+    expect(meta.season).toBe(1);
+    expect(meta.absoluteEpisode).toBe(25);
+  });
+
+  it("parses absolute numbering with episode title", () => {
+    const meta = parseAnimePattern("One Piece - 001 - Romance Dawn");
+    expect(meta.title).toBe("One Piece");
+    expect(meta.absoluteEpisode).toBe(1);
+    expect(meta.episodeTitle).toBe("Romance Dawn");
+  });
+
+  it("strips trailing quality tags", () => {
+    const meta = parseAnimePattern("[Fansub] Bleach - 42 [1080p]");
+    expect(meta.absoluteEpisode).toBe(42);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parsePodcastPattern
+// ---------------------------------------------------------------------------
+describe("parsePodcastPattern", () => {
+  it("parses Show - Date - Episode format", () => {
+    const meta = parsePodcastPattern("Tech Talk - 2024-03-10 - AI Revolution");
+    expect(meta.showName).toBe("Tech Talk");
+    expect(meta.dateTaken).toBe("2024-03-10");
+    expect(meta.episodeTitle).toBe("AI Revolution");
+  });
+
+  it("parses Show - Date format", () => {
+    const meta = parsePodcastPattern("My Podcast - 2024-01-01");
+    expect(meta.showName).toBe("My Podcast");
+    expect(meta.dateTaken).toBe("2024-01-01");
+  });
+
+  it("parses Date - Episode format", () => {
+    const meta = parsePodcastPattern("2024-06-15 - Great Interview");
+    expect(meta.dateTaken).toBe("2024-06-15");
+    expect(meta.episodeTitle).toBe("Great Interview");
+  });
+
+  it("parses Show - Episode format (no date)", () => {
+    const meta = parsePodcastPattern("Science Hour - The Universe");
+    expect(meta.showName).toBe("Science Hour");
+    expect(meta.episodeTitle).toBe("The Universe");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseComicPattern
+// ---------------------------------------------------------------------------
+describe("parseComicPattern", () => {
+  it("parses volume and chapter", () => {
+    const meta = parseComicPattern("One Piece Vol 01 Ch 001");
+    expect(meta.title).toBe("One Piece");
+    expect(meta.volume).toBe(1);
+    expect(meta.chapter).toBe(1);
+  });
+
+  it("parses issue number with #", () => {
+    const meta = parseComicPattern("Batman #042");
+    expect(meta.title).toBe("Batman");
+    expect(meta.chapter).toBe(42);
+  });
+
+  it("parses volume only", () => {
+    const meta = parseComicPattern("Spider-Man Volume 3");
+    expect(meta.title).toBe("Spider-Man");
+    expect(meta.volume).toBe(3);
+  });
+
+  it("parses Chapter keyword", () => {
+    const meta = parseComicPattern("Naruto Chapter 100");
+    expect(meta.chapter).toBe(100);
+  });
+
+  it("handles plain title with no volume or chapter", () => {
+    const meta = parseComicPattern("Watchmen");
+    expect(meta.title).toBe("Watchmen");
+    expect(meta.volume).toBeUndefined();
+    expect(meta.chapter).toBeUndefined();
   });
 });

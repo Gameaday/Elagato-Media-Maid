@@ -22,12 +22,19 @@
           <option value="jellyfin_tv">TV Show — S01E01 format</option>
           <option value="jellyfin_movie">Movie — Title (Year) format</option>
           <option value="jellyfin_movie_version">Movie Multi-Version — Title (Year) [Resolution]</option>
+          <option value="anime">Anime — Absolute Episode Numbering</option>
         </optgroup>
         <optgroup label="Media Archives">
           <option value="photography">Photography — Date + Location</option>
           <option value="music">Music — Track# Artist Song (Jellyfin-compatible)</option>
           <option value="books">Books / eBooks — Author Title (Jellyfin-compatible)</option>
+          <option value="comics">Comics / Manga — Kavita-compatible</option>
           <option value="generic_docs">Documents — Date Prefixed</option>
+        </optgroup>
+        <optgroup label="Download Archives">
+          <option value="youtube_archive">YouTube / Download Archive</option>
+          <option value="podcast_archive">Podcast Archive — Show / Episode</option>
+          <option value="date_hierarchy">Date Hierarchy — YYYY/MM-DD folders</option>
         </optgroup>
         <optgroup label="Emulation">
           <option value="emulation_roms">ROMs — By Platform</option>
@@ -41,7 +48,7 @@
     <div class="sdpi-item" id="customFormatGroup" style="display:none">
       <label class="sdpi-item-label" for="customFormat">Format Template</label>
       <input type="text" id="customFormat" placeholder="{title} - S{season}E{episode}{ext}">
-      <div class="sdpi-info">Tokens: {title}, {season}, {episode}, {episodeTitle}, {year}, {artist}, {track}, {song}, {album}, {date}, {location}, {index}, {platform}, {region}, {resolution}, {source}, {hdr}, {versionTag}, {ext}, {baseName}</div>
+      <div class="sdpi-info">Tokens: {title}, {season}, {episode}, {episodeTitle}, {year}, {artist}, {track}, {song}, {album}, {date}, {location}, {index}, {platform}, {region}, {resolution}, {source}, {hdr}, {versionTag}, {uploader}, {videoId}, {showName}, {volume}, {chapter}, {absoluteEpisode}, {ext}, {baseName}</div>
     </div>
 
     <div class="sdpi-item">
@@ -72,18 +79,24 @@
       jellyfin_tv:            "Show Name - S01E02 - Episode Title.mkv",
       jellyfin_movie:         "Movie Title (2024).mkv",
       jellyfin_movie_version: "Movie Title (2024) - [1080p Bluray].mkv → Movie Title (2024)/",
+      anime:                  "Anime Title - S01E001 - Episode Title.mkv → Anime Title/Season 01/",
       photography:            "2024-06-15_Paris_001.jpg",
       music:                  "01 - Artist Name - Song Title.flac → Artist/Album (Year)/",
       books:                  "Author Name - Book Title (2024).epub → Author Name/",
+      comics:                 "Series Vol 01 Ch 001.cbz → Series/Volume 01/",
       generic_docs:           "2024-06-15_Original Filename.pdf",
+      youtube_archive:        "2024-01-15 - Video Title [VideoID].mp4 → Channel Name/",
+      podcast_archive:        "Show Name - 2024-03-10 - Episode Title.mp3 → Show Name/",
+      date_hierarchy:         "filename.pdf → 2024/2024-06-15/",
       emulation_roms:         "Super Mario Bros (USA).nes → NES/",
       custom:                 ""
     };
 
     const HAS_FOLDER = {
       jellyfin_tv: true, jellyfin_movie: true, jellyfin_movie_version: true,
-      photography: false, music: true, books: true, generic_docs: false,
-      emulation_roms: true, custom: false
+      anime: true, photography: false, music: true, books: true, comics: true,
+      generic_docs: false, youtube_archive: true, podcast_archive: true,
+      date_hierarchy: true, emulation_roms: true, custom: false
     };
 
     const folderPathEl    = document.getElementById("folderPath");

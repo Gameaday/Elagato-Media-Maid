@@ -15,8 +15,11 @@ import {
   EBOOK_EXTS,
   DOCUMENT_EXTS,
   ROM_EXTS,
+  COMIC_EXTS,
   TV_EPISODE_RE,
   RESOLUTION_RE,
+  YOUTUBE_ID_RE,
+  ABSOLUTE_EPISODE_RE,
   DETECTION_MAX_DEPTH,
   validateFolderPath
 } from "./config.js";
@@ -130,6 +133,51 @@ async function countResolutionTaggedVideos(dir: string): Promise<number> {
 }
 
 /**
+ * Count files that contain YouTube video IDs (11-character IDs in square brackets).
+ * Multiple files with YouTube IDs suggest a yt-dlp download archive.
+ */
+async function countYoutubeIdFiles(dir: string): Promise<number> {
+  let count = 0;
+  try {
+    const entries = await readdir(dir);
+    for (const name of entries) {
+      if (YOUTUBE_ID_RE.test(name)) {
+        count++;
+      }
+    }
+  } catch {
+    // ignore read errors
+  }
+  return count;
+}
+
+/**
+ * Count filenames with absolute episode numbering patterns (common in anime).
+ * Looks for patterns like " - 001", "[SubGroup]", or absolute numbering
+ * without standard SxxExx format.
+ */
+async function countAnimePatternMatches(dir: string): Promise<number> {
+  let count = 0;
+  try {
+    const entries = await readdir(dir);
+    for (const name of entries) {
+      const ext = extname(name).toLowerCase();
+      if (!VIDEO_EXTS.has(ext)) continue;
+      // Check for fansub group tags [SubGroup] at start
+      const hasFansubTag = /^\[.+?\]/.test(name);
+      // Check for absolute episode numbering without SxxExx
+      const hasAbsoluteEp = ABSOLUTE_EPISODE_RE.test(name) && !TV_EPISODE_RE.test(name);
+      if (hasFansubTag || hasAbsoluteEp) {
+        count++;
+      }
+    }
+  } catch {
+    // ignore read errors
+  }
+  return count;
+}
+
+/**
  * Detect the dominant media type in the given directory.
  */
 export async function detectMediaType(folderPath: string): Promise<DetectionResult> {
@@ -161,9 +209,12 @@ export async function detectMediaType(folderPath: string): Promise<DetectionResu
   const bookCount = countMatching(extCounts, EBOOK_EXTS);
   const docCount = countMatching(extCounts, DOCUMENT_EXTS);
   const romCount = countMatching(extCounts, ROM_EXTS);
+  const comicCount = countMatching(extCounts, COMIC_EXTS);
   const tvPatternCount = await countTvPatternMatches(folderPath);
   const nfoPresent = await hasNfoFiles(folderPath);
   const resTaggedCount = await countResolutionTaggedVideos(folderPath);
+  const youtubeIdCount = await countYoutubeIdFiles(folderPath);
+  const animePatternCount = await countAnimePatternMatches(folderPath);
 
   // Score each type
   const scores: Array<{ type: MediaType; score: number; reason: string }> = [
@@ -187,6 +238,11 @@ export async function detectMediaType(folderPath: string): Promise<DetectionResu
       type: MediaType.BOOKS,
       score: bookCount,
       reason: `${bookCount} ebook file(s)`
+    },
+    {
+      type: MediaType.COMICS,
+      score: comicCount,
+      reason: `${comicCount} comic/manga file(s)`
     },
     {
       type: MediaType.GENERIC_DOCS,
@@ -221,6 +277,16 @@ export async function detectMediaType(folderPath: string): Promise<DetectionResu
     } else {
       finalType = MediaType.JELLYFIN_MOVIE;
     }
+  }
+
+  // If anime patterns are dominant, suggest anime pattern
+  if (top.type === MediaType.JELLYFIN_TV && animePatternCount > tvPatternCount) {
+    finalType = MediaType.ANIME;
+  }
+
+  // If YouTube IDs found in video filenames, suggest YouTube archive
+  if ((top.type === MediaType.JELLYFIN_TV || top.type === MediaType.JELLYFIN_MOVIE) && youtubeIdCount >= 2) {
+    finalType = MediaType.YOUTUBE_ARCHIVE;
   }
 
   const confidence = Math.min(top.score / totalFiles, 1);
