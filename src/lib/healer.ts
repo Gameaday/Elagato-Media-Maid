@@ -428,6 +428,7 @@ const RESOLUTION_RANK: Record<string, number> = {
   "576p": 2,
   "720p": 3,
   "1080p": 4,
+  "2160p": 5,
   "4K": 5
 };
 
@@ -566,13 +567,14 @@ export function scanQualityInconsistencies(files: string[]): QualityReport {
 export function detectNamingScheme(fileName: string): string {
   const base = basename(fileName, extname(fileName));
   // Dash-separated (e.g. "Show - S01E01 - Title") — must check before plain SxxExx
-  if (/\s-\s.*[Ss]\d{1,2}[Ee]\d{1,3}/.test(base)) return "dash_SxxExx";
+  if (/\s-\s[Ss]\d{1,2}[Ee]\d{1,3}/.test(base)) return "dash_SxxExx";
   // SxxExx standard
   if (/[Ss]\d{1,2}[Ee]\d{1,3}/.test(base)) return "SxxExx";
   // NxNN standard
   if (/\d{1,2}x\d{2,3}/.test(base)) return "NxNN";
-  // Scene style with dots
-  if (/^[A-Za-z].*\.\d{4}\./.test(base)) return "scene_dots";
+  // Scene style with dots: title.year.quality (e.g. "Movie.Title.2020.1080p.BluRay.mkv")
+  // Require a quality/release token after the year to avoid false positives on TV episodes with years.
+  if (/^[A-Za-z].*\.\d{4}\.(?:\d{3,4}p|BluRay|WEB|HDTV|DVDRip|BDRip|REMUX)/i.test(base)) return "scene_dots";
   // Underscore-separated
   if (/^[A-Za-z].*_S\d{1,2}E\d{1,2}/i.test(base)) return "underscore";
   // Absolute episode numbering
@@ -695,7 +697,7 @@ function detectDuplicateEpisodes(files: string[], mediaType: MediaType): FileIss
 
     let key: string | undefined;
     if (tvMeta.season !== undefined && tvMeta.episode !== undefined) {
-      key = `S${String(tvMeta.season).padStart(2, "0")}E${String(tvMeta.episode).padStart(2, "0")}`;
+      key = `S${String(tvMeta.season).padStart(2, "0")}E${String(tvMeta.episode).padStart(3, "0")}`;
     } else if (mediaType === MediaType.ANIME) {
       const animeMeta = parseAnimePattern(base);
       if (animeMeta.absoluteEpisode !== undefined) {
