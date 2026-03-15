@@ -192,11 +192,12 @@ export async function estimateRomCompression(
 }
 
 /**
- * Compress cartridge-based ROM files individually into .zip archives.
- * Each ROM file becomes "filename.zip" containing the original file.
+ * Compress cartridge-based ROM files individually into compressed archives.
  *
- * Prefers the external `7z` tool for proper ZIP archive creation.
- * Falls back to Node.js gzip (.gz) if 7z is not available.
+ * When the external `7z` tool is available, produces proper .zip archives.
+ * When `7z` is not installed, falls back to Node.js gzip and produces .gz
+ * files instead. The output extension in `CompressResult.operations` reflects
+ * the actual format used.
  *
  * @param folderPath - Directory containing ROM files
  * @param dryRun     - If true, estimates only, no actual compression
@@ -265,9 +266,13 @@ export async function compressRoms(
         if (useZip) {
           // Use 7z for proper ZIP archive creation
           await new Promise<void>((resolve, reject) => {
-            execFile("7z", ["a", "-tzip", toPath, fromPath], { timeout: 60_000 }, (err) => {
-              if (err) reject(err);
-              else resolve();
+            execFile("7z", ["a", "-tzip", toPath, fromPath], { timeout: 60_000 }, (err, _stdout, stderr) => {
+              if (err) {
+                logOperation({ operation: "error", from: fromPath, to: toPath, message: `7z failed: ${err.message}${stderr ? ` — ${stderr.trim()}` : ""}` });
+                reject(err);
+              } else {
+                resolve();
+              }
             });
           });
         } else {
