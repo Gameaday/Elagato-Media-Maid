@@ -132,6 +132,29 @@
       "UUID": "com.gameaday.mediamaid.nfoeditor"
     },
     {
+      "Icon": "imgs/actions/healer/icon",
+      "Name": "Collection Healer",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/healer-status.json",
+        "TriggerDescription": {
+          "Rotate": "Browse issues",
+          "Push": "Heal collection",
+          "Touch": "Diagnose",
+          "LongTouch": "Dry-run heal"
+        }
+      },
+      "PropertyInspectorPath": "ui/healer.html",
+      "States": [
+        { "Image": "imgs/actions/healer/key", "Title": "Heal" },
+        { "Image": "imgs/actions/healer/key-active", "Title": "Healing…" }
+      ],
+      "DisableAutomaticStates": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Diagnose and heal naming issues in media collections. Identifies missing metadata, inconsistent naming, and junk tokens, then batch-fixes them using folder context inference.",
+      "UUID": "com.gameaday.mediamaid.healer"
+    },
+    {
       "Icon": "imgs/actions/librarystats/icon",
       "Name": "Library Stats",
       "Controllers": ["Encoder"],

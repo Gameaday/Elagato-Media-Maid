@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Collection Healer – MediaMaid</title>
+  <link rel="stylesheet" href="mediamaid.css">
+</head>
+<body>
+  <div class="sdpi-wrapper">
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-label" for="collectionPath">Collection Root</label>
+      <input type="text" id="collectionPath" placeholder="/path/to/media/collection">
+      <div id="pathStatus"></div>
+    </div>
+
+    <div class="sdpi-item">
+      <label class="sdpi-item-label" for="targetType">Target Standard</label>
+      <select id="targetType">
+        <option value="auto">Auto-detect (SmartFix)</option>
+        <optgroup label="Video Libraries (Jellyfin / Plex)">
+          <option value="jellyfin_tv">TV Show — S01E01 format</option>
+          <option value="jellyfin_movie">Movie — Title (Year) format</option>
+          <option value="jellyfin_movie_version">Movie Multi-Version — [Resolution Source HDR]</option>
+          <option value="anime">Anime — Absolute Episode Numbering</option>
+        </optgroup>
+        <optgroup label="Media Archives">
+          <option value="photography">Photography — Date + Location</option>
+          <option value="music">Music — Track# Artist Song</option>
+          <option value="books">Books / eBooks — Author Title</option>
+          <option value="comics">Comics / Manga — Kavita-compatible</option>
+          <option value="generic_docs">Documents — Date Prefixed</option>
+        </optgroup>
+        <optgroup label="Download Archives">
+          <option value="youtube_archive">YouTube / Download Archive</option>
+          <option value="podcast_archive">Podcast Archive</option>
+          <option value="date_hierarchy">Date Hierarchy</option>
+        </optgroup>
+        <optgroup label="Emulation">
+          <option value="emulation_roms">ROMs — By Platform</option>
+        </optgroup>
+      </select>
+    </div>
+
+    <hr class="sdpi-divider">
+
+    <div class="sdpi-info" style="margin-bottom: 6px">
+      <strong>What the Healer fixes:</strong>
+    </div>
+
+    <div class="sdpi-info">
+      ✓ Missing release years in movie filenames<br>
+      ✓ Missing season/episode numbers in TV files<br>
+      ✓ Generic filenames (untitled, video, track 01)<br>
+      ✓ Scene group junk tokens (YIFY, RARBG, etc.)<br>
+      ✓ Inconsistent naming across a collection<br>
+      ✓ Wrong file extension casing (.MKV → .mkv)<br>
+      ✓ Missing resolution tags in multi-version movies
+    </div>
+
+    <hr class="sdpi-divider">
+
+    <div class="sdpi-info" style="margin-bottom: 6px">
+      <strong>How it works:</strong>
+    </div>
+
+    <div class="sdpi-info">
+      The healer infers metadata from folder names (e.g. "Breaking Bad (2008)/Season 01/"),
+      sibling files, and NFO companions, then applies consistent naming across the entire collection.
+    </div>
+
+    <hr class="sdpi-divider">
+
+    <div class="sdpi-info">
+      <strong>Short press</strong> – diagnose + heal collection<br>
+      <strong>Long press (&gt;0.5 s)</strong> – dry run (preview in log, no changes)<br>
+      <strong>Dial rotate</strong> – browse diagnosed issues<br>
+      <strong>Dial touch</strong> – diagnose only (no changes)
+    </div>
+
+  </div>
+
+  <script>
+    const collectionPathEl = document.getElementById("collectionPath");
+    const targetTypeEl     = document.getElementById("targetType");
+    const pathStatusEl     = document.getElementById("pathStatus");
+
+    function validatePath() {
+      const path = collectionPathEl.value.trim();
+      if (!path) {
+        pathStatusEl.className = "";
+        pathStatusEl.textContent = "";
+      } else if (!path.startsWith("/") && !path.match(/^[A-Za-z]:\\/)) {
+        pathStatusEl.className = "sdpi-warning";
+        pathStatusEl.textContent = "Path should be absolute (e.g., /media/movies or C:\\Media\\Movies).";
+      } else {
+        pathStatusEl.className = "sdpi-success";
+        pathStatusEl.textContent = "Ready to diagnose and heal.";
+      }
+    }
+
+    function loadSettings(settings) {
+      if (settings.collectionPath !== undefined) collectionPathEl.value = settings.collectionPath;
+      if (settings.targetType !== undefined) targetTypeEl.value = settings.targetType;
+      validatePath();
+    }
+
+    function saveSettings() {
+      window.sendToPlugin({
+        event: "setSettings",
+        payload: {
+          collectionPath: collectionPathEl.value.trim(),
+          targetType:     targetTypeEl.value
+        }
+      });
+    }
+
+    function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
+      const websocket = new WebSocket("ws://127.0.0.1:" + inPort);
+      const actionInfo = JSON.parse(inActionInfo);
+      const settings = actionInfo.payload?.settings ?? {};
+      loadSettings(settings);
+
+      websocket.onopen = () => {
+        websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: inPropertyInspectorUUID }));
+      };
+
+      websocket.onmessage = (evt) => {
+        const msg = JSON.parse(evt.data);
+        if (msg.event === "didReceiveSettings") {
+          loadSettings(msg.payload.settings ?? {});
+        }
+      };
+
+      window.sendToPlugin = (payload) => {
+        websocket.send(JSON.stringify({
+          event:   "setSettings",
+          context: inPropertyInspectorUUID,
+          payload: payload.payload
+        }));
+      };
+
+      collectionPathEl.addEventListener("input", () => { validatePath(); saveSettings(); });
+      targetTypeEl.addEventListener("change", saveSettings);
+    }
+  </script>
+</body>
+</html>
