@@ -173,6 +173,8 @@ describe("buildTranscodeCommand", () => {
     expect(cmd!.command).toContain("bt2020");
     expect(cmd!.command).toContain("smpte2084");
     expect(cmd!.command).toContain("yuv420p10le");
+    // Should NOT hardcode master-display — FFmpeg copies from source
+    expect(cmd!.command).not.toContain("master-display=");
     // HDR preset preserves original audio rather than re-encoding
     expect(cmd!.preset.ffmpegArgs).toContain("-c:a");
     expect(cmd!.preset.ffmpegArgs).toContain("copy");

@@ -271,7 +271,11 @@ export const TRANSCODE_PRESETS: Record<string, TranscodePreset> = {
     description: "Preserves HDR10/HLG metadata and original audio. For HDR source material.",
     ffmpegArgs: [
       "-c:v", "libx265", "-crf", "20", "-preset", "slow",
-      "-x265-params", "profile=main10:hdr-opt=1:repeat-headers=1:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1):max-cll=1000,400",
+      // hdr-opt + repeat-headers enable HDR SEI passthrough; color tags are
+      // set to BT.2020/PQ defaults — FFmpeg copies actual mastering display
+      // and MaxCLL/MaxFALL from the source when present, so hardcoded
+      // master-display values are omitted to avoid overriding source metadata.
+      "-x265-params", "profile=main10:hdr-opt=1:repeat-headers=1:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc",
       "-pix_fmt", "yuv420p10le",
       "-c:a", "copy",
       "-c:s", "copy"
@@ -283,6 +287,8 @@ export const TRANSCODE_PRESETS: Record<string, TranscodePreset> = {
     description: "Best compression ratio, very slow. Maximum space savings for archival or streaming.",
     ffmpegArgs: [
       "-c:v", "libsvtav1", "-crf", "28", "-preset", "4",
+      // tune=0 selects VQ (Visual Quality) mode, optimising for perceptual
+      // fidelity rather than PSNR, which gives better subjective quality.
       "-svtav1-params", "tune=0",
       "-pix_fmt", "yuv420p10le",
       "-c:a", "libopus", "-b:a", "128k",

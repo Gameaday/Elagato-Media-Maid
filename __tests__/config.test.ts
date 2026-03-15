@@ -419,6 +419,8 @@ describe("TRANSCODE_PRESETS", () => {
     expect(argsStr).toContain("hdr-opt=1");
     expect(argsStr).toContain("bt2020");
     expect(argsStr).toContain("smpte2084");
+    // Should NOT hardcode master-display values — let FFmpeg copy from source
+    expect(argsStr).not.toContain("master-display=");
   });
 
   it("has av1_quality preset with 10-bit", () => {
