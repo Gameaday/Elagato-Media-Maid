@@ -12,6 +12,7 @@ import { SmartFixAction } from "./actions/smart-fix.js";
 import { UndoAction } from "./actions/undo-action.js";
 import { NukeDownloadsAction } from "./actions/nuke-downloads.js";
 import { DeepScanAction } from "./actions/deep-scan.js";
+import { CollectionHealerAction } from "./actions/collection-healer.js";
 import { NfoEditorAction } from "./actions/nfo-editor.js";
 import { LibraryStatsAction } from "./actions/library-stats.js";
 
@@ -23,6 +24,7 @@ streamDeck.actions.registerAction(new SmartFixAction());
 streamDeck.actions.registerAction(new UndoAction());
 streamDeck.actions.registerAction(new NukeDownloadsAction());
 streamDeck.actions.registerAction(new DeepScanAction());
+streamDeck.actions.registerAction(new CollectionHealerAction());
 
 // Premium actions
 streamDeck.actions.registerAction(new NfoEditorAction());

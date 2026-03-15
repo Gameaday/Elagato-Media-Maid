@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NFO Editor Settings</title>
+  <title>NFO Editor – MediaMaid</title>
   <link rel="stylesheet" href="mediamaid.css">
 </head>
 <body>
@@ -36,68 +36,42 @@
 
     <hr class="sdpi-divider">
 
-    <div class="sdpi-info">
-      Create, edit, and update NFO metadata files for Jellyfin/Kodi.<br>
-      <strong>Key:</strong> Short press = create/update · Long press = preview<br>
-      <strong>Dial:</strong> Rotate to browse fields · Push to save · Touch to edit
+    <div class="sdpi-info sdpi-controls-hint">
+      <strong>▶ Press</strong> create/update NFO &nbsp;·&nbsp; <strong>▶ Hold</strong> preview<br>
+      <strong>↻ Dial</strong> browse fields &nbsp;·&nbsp; <strong>Push</strong> save &nbsp;·&nbsp; <strong>Tap</strong> edit
     </div>
 
   </div>
 
+  <script src="sdpi-common.js"></script>
   <script>
-    const targetPathEl  = document.getElementById("targetPath");
-    const nfoTypeEl     = document.getElementById("nfoType");
-    const licenseKeyEl  = document.getElementById("licenseKey");
-    const pathStatusEl  = document.getElementById("pathStatus");
+    var targetPathEl = document.getElementById("targetPath");
+    var nfoTypeEl    = document.getElementById("nfoType");
+    var licenseKeyEl = document.getElementById("licenseKey");
+    var pathStatusEl = document.getElementById("pathStatus");
 
-    function validatePath() {
-      const path = targetPathEl.value.trim();
-      if (!path) { pathStatusEl.className = ""; pathStatusEl.textContent = ""; }
-      else if (!path.startsWith("/") && !path.match(/^[A-Za-z]:\\/)) {
-        pathStatusEl.className = "sdpi-warning";
-        pathStatusEl.textContent = "Path should be absolute.";
-      } else {
-        pathStatusEl.className = "sdpi-success";
-        pathStatusEl.textContent = "Ready.";
-      }
-    }
-
-    function loadSettings(s) {
-      targetPathEl.value = s.targetPath || "";
-      nfoTypeEl.value = s.nfoType || "";
-      licenseKeyEl.value = s.licenseKey || "";
-      validatePath();
-    }
-
-    function saveSettings() {
-      const payload = {
+    function gatherSettings() {
+      return {
         targetPath: targetPathEl.value.trim(),
-        nfoType: nfoTypeEl.value,
+        nfoType:    nfoTypeEl.value,
         licenseKey: licenseKeyEl.value.trim()
       };
-      $PI.websocket && $PI.websocket.send(JSON.stringify({ event: "setSettings", context: $PI.uuid, payload }));
     }
 
-    const $PI = { websocket: null, uuid: "" };
+    function onSettingsLoaded(s) {
+      targetPathEl.value = s.targetPath || "";
+      nfoTypeEl.value    = s.nfoType || "";
+      licenseKeyEl.value = s.licenseKey || "";
+      validatePath(targetPathEl, pathStatusEl);
+    }
 
-    function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
-      $PI.uuid = inPropertyInspectorUUID;
-      const actionInfo = JSON.parse(inActionInfo);
-      $PI.websocket = new WebSocket("ws://127.0.0.1:" + inPort);
-
-      $PI.websocket.onopen = () => {
-        $PI.websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: $PI.uuid }));
-        $PI.websocket.send(JSON.stringify({ event: "getSettings", context: $PI.uuid }));
-      };
-      $PI.websocket.onmessage = (evt) => {
-        const msg = JSON.parse(evt.data);
-        if (msg.event === "didReceiveSettings") loadSettings(msg.payload.settings);
-      };
-
-      loadSettings(actionInfo.payload?.settings ?? {});
-      targetPathEl.addEventListener("input", () => { validatePath(); saveSettings(); });
-      nfoTypeEl.addEventListener("change", saveSettings);
-      licenseKeyEl.addEventListener("change", saveSettings);
+    function onPiConnected() {
+      targetPathEl.addEventListener("input", function () {
+        validatePath(targetPathEl, pathStatusEl);
+        saveSettings(gatherSettings());
+      });
+      nfoTypeEl.addEventListener("change", function () { saveSettings(gatherSettings()); });
+      licenseKeyEl.addEventListener("change", function () { saveSettings(gatherSettings()); });
     }
   </script>
 </body>

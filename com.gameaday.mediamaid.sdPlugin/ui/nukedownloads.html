@@ -9,6 +9,15 @@
 <body>
   <div class="sdpi-wrapper">
 
+    <details class="sdpi-collapse" open>
+      <summary class="sdpi-collapse-header">Getting Started</summary>
+      <div class="sdpi-collapse-body">
+        <div class="sdpi-info">
+          Point this at your <strong>Downloads</strong> folder. One press sorts everything into organized subfolders by file type. Long-press to preview first.
+        </div>
+      </div>
+    </details>
+
     <div class="sdpi-item">
       <label class="sdpi-item-label" for="folderPath">Target Folder</label>
       <input type="text" id="folderPath" placeholder="/Users/you/Downloads">
@@ -39,119 +48,92 @@
       </label>
     </div>
 
+    <!-- Experimental features -->
+    <details class="sdpi-collapse">
+      <summary class="sdpi-collapse-header">🧪 Experimental</summary>
+      <div class="sdpi-collapse-body">
+        <div class="sdpi-item">
+          <label class="sdpi-item-check">
+            <input type="checkbox" id="compressRoms">
+            Compress ROMs after sorting
+          </label>
+          <div class="sdpi-info">Zip cartridge-based ROMs for space savings. Disc-based ROMs (ISO, BIN) will be flagged for CHD conversion.</div>
+        </div>
+
+        <div class="sdpi-item">
+          <label class="sdpi-item-check">
+            <input type="checkbox" id="generateChecksums">
+            Generate SHA-256 checksums
+          </label>
+          <div class="sdpi-info">Create checksums.sha256 manifests in sorted folders for archival integrity verification.</div>
+        </div>
+
+        <div class="sdpi-item">
+          <label class="sdpi-item-label" for="transcodePreset">Video Compression</label>
+          <select id="transcodePreset">
+            <option value="none">None (default)</option>
+            <option value="copy_mkv">Remux to MKV (lossless, instant)</option>
+            <optgroup label="HEVC (H.265) — streaming-optimized">
+              <option value="hevc_hifi">High Fidelity — CRF 18, 10-bit, near-transparent</option>
+              <option value="hevc_balanced">Balanced — CRF 22, 10-bit, ~50% smaller</option>
+              <option value="hevc_compact">Compact — CRF 26, 10-bit, space-efficient</option>
+              <option value="hevc_hdr">HDR Preserve — CRF 20, 10-bit, keeps HDR metadata</option>
+            </optgroup>
+            <optgroup label="AV1 — maximum compression">
+              <option value="av1_quality">AV1 Quality — CRF 28, 10-bit (very slow)</option>
+            </optgroup>
+          </select>
+          <div class="sdpi-info">Requires FFmpeg on PATH. Generates commands for review — videos are NOT re-encoded without confirmation.</div>
+        </div>
+      </div>
+    </details>
+
     <hr class="sdpi-divider">
 
-    <div class="sdpi-item">
-      <label class="sdpi-item-label">🧪 Experimental</label>
-    </div>
-
-    <div class="sdpi-item">
-      <label class="sdpi-item-check">
-        <input type="checkbox" id="compressRoms">
-        Compress ROMs after sorting
-      </label>
-      <div class="sdpi-info">Zip cartridge-based ROMs for space savings. Disc-based ROMs (ISO, BIN) will be flagged for CHD conversion.</div>
-    </div>
-
-    <div class="sdpi-item">
-      <label class="sdpi-item-check">
-        <input type="checkbox" id="generateChecksums">
-        Generate SHA-256 checksums
-      </label>
-      <div class="sdpi-info">Create checksums.sha256 manifests in sorted folders for archival integrity verification.</div>
-    </div>
-
-    <div class="sdpi-item">
-      <label class="sdpi-item-label" for="transcodePreset">Video Compression</label>
-      <select id="transcodePreset">
-        <option value="none">None (default)</option>
-        <option value="copy_mkv">Remux to MKV (lossless, instant)</option>
-        <optgroup label="HEVC (H.265) — streaming-optimized">
-          <option value="hevc_hifi">High Fidelity — CRF 18, 10-bit, near-transparent</option>
-          <option value="hevc_balanced">Balanced — CRF 22, 10-bit, ~50% smaller</option>
-          <option value="hevc_compact">Compact — CRF 26, 10-bit, space-efficient</option>
-          <option value="hevc_hdr">HDR Preserve — CRF 20, 10-bit, keeps HDR metadata</option>
-        </optgroup>
-        <optgroup label="AV1 — maximum compression">
-          <option value="av1_quality">AV1 Quality — CRF 28, 10-bit (very slow)</option>
-        </optgroup>
-      </select>
-      <div class="sdpi-info">Requires FFmpeg on PATH. Generates transcode commands logged for review. Videos are NOT re-encoded automatically without confirmation.</div>
-    </div>
-
-    <hr class="sdpi-divider">
-
-    <div class="sdpi-info">
-      <strong>Short press</strong> – sort files into subfolders<br>
-      <strong>Long press (&gt;0.5 s)</strong> – dry run (preview in log)<br>
-      <strong>Dial rotate</strong> – browse categories
+    <div class="sdpi-info sdpi-controls-hint">
+      <strong>▶ Press</strong> sort files &nbsp;·&nbsp; <strong>▶ Hold</strong> dry run<br>
+      <strong>↻ Dial</strong> browse categories
     </div>
 
   </div>
 
+  <script src="sdpi-common.js"></script>
   <script>
-    const folderPathEl      = document.getElementById("folderPath");
-    const createOtherEl     = document.getElementById("createOtherFolder");
-    const pathStatusEl      = document.getElementById("pathStatus");
-    const compressRomsEl    = document.getElementById("compressRoms");
-    const generateChecksumsEl = document.getElementById("generateChecksums");
-    const transcodePresetEl = document.getElementById("transcodePreset");
+    var folderPathEl        = document.getElementById("folderPath");
+    var createOtherEl       = document.getElementById("createOtherFolder");
+    var pathStatusEl        = document.getElementById("pathStatus");
+    var compressRomsEl      = document.getElementById("compressRoms");
+    var generateChecksumsEl = document.getElementById("generateChecksums");
+    var transcodePresetEl   = document.getElementById("transcodePreset");
 
-    function validatePath() {
-      const path = folderPathEl.value.trim();
-      if (!path) { pathStatusEl.className = ""; pathStatusEl.textContent = ""; }
-      else if (!path.startsWith("/") && !path.match(/^[A-Za-z]:\\/)) {
-        pathStatusEl.className = "sdpi-warning";
-        pathStatusEl.textContent = "Path should be absolute.";
-      } else {
-        pathStatusEl.className = "sdpi-success";
-        pathStatusEl.textContent = "Ready.";
-      }
+    function gatherSettings() {
+      return {
+        folderPath:        folderPathEl.value.trim(),
+        createOtherFolder: createOtherEl.checked,
+        compressRoms:      compressRomsEl.checked,
+        generateChecksums: generateChecksumsEl.checked,
+        transcodePreset:   transcodePresetEl.value
+      };
     }
 
-    function loadSettings(s) {
+    function onSettingsLoaded(s) {
       if (s.folderPath !== undefined) folderPathEl.value = s.folderPath;
       if (s.createOtherFolder !== undefined) createOtherEl.checked = s.createOtherFolder;
       if (s.compressRoms !== undefined) compressRomsEl.checked = s.compressRoms;
       if (s.generateChecksums !== undefined) generateChecksumsEl.checked = s.generateChecksums;
       if (s.transcodePreset !== undefined) transcodePresetEl.value = s.transcodePreset;
-      validatePath();
+      validatePath(folderPathEl, pathStatusEl);
     }
 
-    function saveSettings() {
-      window.sendToPlugin && window.sendToPlugin({
-        event: "setSettings",
-        payload: {
-          folderPath:        folderPathEl.value.trim(),
-          createOtherFolder: createOtherEl.checked,
-          compressRoms:       compressRomsEl.checked,
-          generateChecksums:  generateChecksumsEl.checked,
-          transcodePreset:    transcodePresetEl.value
-        }
+    function onPiConnected() {
+      folderPathEl.addEventListener("input", function () {
+        validatePath(folderPathEl, pathStatusEl);
+        saveSettings(gatherSettings());
       });
-    }
-
-    function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
-      const websocket = new WebSocket("ws://127.0.0.1:" + inPort);
-      const actionInfo = JSON.parse(inActionInfo);
-      loadSettings(actionInfo.payload?.settings ?? {});
-
-      websocket.onopen = () => {
-        websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: inPropertyInspectorUUID }));
-      };
-      websocket.onmessage = (evt) => {
-        const msg = JSON.parse(evt.data);
-        if (msg.event === "didReceiveSettings") loadSettings(msg.payload.settings ?? {});
-      };
-      window.sendToPlugin = (payload) => {
-        websocket.send(JSON.stringify({ event: "setSettings", context: inPropertyInspectorUUID, payload: payload.payload }));
-      };
-
-      folderPathEl.addEventListener("input", () => { validatePath(); saveSettings(); });
-      createOtherEl.addEventListener("change", saveSettings);
-      compressRomsEl.addEventListener("change", saveSettings);
-      generateChecksumsEl.addEventListener("change", saveSettings);
-      transcodePresetEl.addEventListener("change", saveSettings);
+      createOtherEl.addEventListener("change", function () { saveSettings(gatherSettings()); });
+      compressRomsEl.addEventListener("change", function () { saveSettings(gatherSettings()); });
+      generateChecksumsEl.addEventListener("change", function () { saveSettings(gatherSettings()); });
+      transcodePresetEl.addEventListener("change", function () { saveSettings(gatherSettings()); });
     }
   </script>
 </body>

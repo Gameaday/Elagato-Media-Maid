@@ -1,11 +1,14 @@
 /**
  * LibraryStats Action for MediaMaid.
  *
- * Stream Deck+ only (Encoder controller).
- * Displays real-time library statistics on the touchscreen:
- * file counts by type, total size, naming health score.
+ * Displays library statistics: file counts by type, total size, naming health.
+ * Works on all Stream Deck models. Stream Deck+ shows a live dashboard on
+ * the touchscreen.
  *
- * Encoder:
+ * Keypad:
+ *   Short press  → refresh statistics
+ *
+ * Encoder (Stream Deck+):
  *   Rotate       → cycle through different stats
  *   Push         → refresh statistics
  *   Touch        → show detailed breakdown
@@ -15,6 +18,7 @@ import streamDeck, {
   action,
   SingletonAction,
   type Action,
+  type KeyDownEvent,
   type WillAppearEvent,
   type WillDisappearEvent,
   type DidReceiveSettingsEvent,
@@ -41,7 +45,13 @@ export class LibraryStatsAction extends SingletonAction<LibraryStatsSettings> {
   private statIndex = new Map<string, number>();
   private refreshTimers = new Map<string, ReturnType<typeof setInterval>>();
 
-  // ── Encoder handlers (Stream Deck+ only) ─────────────────────────
+  // ── Keypad handlers ─────────────────────────────────────────────
+
+  override async onKeyDown(ev: KeyDownEvent<LibraryStatsSettings>): Promise<void> {
+    await this.refreshStats(ev.action, ev.payload.settings);
+  }
+
+  // ── Encoder handlers (Stream Deck+) ─────────────────────────
 
   override async onDialRotate(ev: DialRotateEvent<LibraryStatsSettings>): Promise<void> {
     const context = ev.action.id;
@@ -202,6 +212,7 @@ export class LibraryStatsAction extends SingletonAction<LibraryStatsSettings> {
 
       if (actionObj.isKey()) {
         await actionObj.showOk();
+        await actionObj.setTitle(`${stats.totalFiles}\nfiles`);
       }
       streamDeck.logger.info(
         `LibraryStats: ${stats.totalFiles} files, ${stats.totalSizeFormatted}, ` +

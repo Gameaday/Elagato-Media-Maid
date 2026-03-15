@@ -9,6 +9,15 @@
 <body>
   <div class="sdpi-wrapper">
 
+    <details class="sdpi-collapse" open>
+      <summary class="sdpi-collapse-header">Getting Started</summary>
+      <div class="sdpi-collapse-body">
+        <div class="sdpi-info">
+          Point this at any existing media collection. The healer scans for naming problems, missing metadata, and inconsistencies — then batch-fixes everything. Long-press for a safe dry run first.
+        </div>
+      </div>
+    </details>
+
     <div class="sdpi-item">
       <label class="sdpi-item-label" for="collectionPath">Collection Root</label>
       <input type="text" id="collectionPath" placeholder="/path/to/media/collection">
@@ -19,162 +28,118 @@
       <label class="sdpi-item-label" for="targetType">Target Standard</label>
       <select id="targetType">
         <option value="auto">Auto-detect (SmartFix)</option>
-        <optgroup label="Video Libraries (Jellyfin / Plex)">
+        <optgroup label="🎬 Video Libraries (Jellyfin / Plex)">
           <option value="jellyfin_tv">TV Show — S01E01 format</option>
           <option value="jellyfin_movie">Movie — Title (Year) format</option>
           <option value="jellyfin_movie_version">Movie Multi-Version — [Resolution Source HDR]</option>
           <option value="anime">Anime — Absolute Episode Numbering</option>
         </optgroup>
-        <optgroup label="Media Archives">
+        <optgroup label="📦 Media Archives">
           <option value="photography">Photography — Date + Location</option>
           <option value="music">Music — Track# Artist Song</option>
           <option value="books">Books / eBooks — Author Title</option>
           <option value="comics">Comics / Manga — Kavita-compatible</option>
           <option value="generic_docs">Documents — Date Prefixed</option>
         </optgroup>
-        <optgroup label="Download Archives">
+        <optgroup label="📥 Download Archives">
           <option value="youtube_archive">YouTube / Download Archive</option>
           <option value="podcast_archive">Podcast Archive</option>
           <option value="date_hierarchy">Date Hierarchy</option>
         </optgroup>
-        <optgroup label="Emulation">
+        <optgroup label="🎮 Emulation">
           <option value="emulation_roms">ROMs — By Platform</option>
         </optgroup>
       </select>
     </div>
 
-    <hr class="sdpi-divider">
+    <!-- Advanced settings -->
+    <details class="sdpi-collapse">
+      <summary class="sdpi-collapse-header">Internet Metadata Lookup</summary>
+      <div class="sdpi-collapse-body">
+        <div class="sdpi-info" style="margin-bottom:8px">Enriches missing metadata from public databases when folder context isn't enough.</div>
 
-    <div class="sdpi-item">
-      <label class="sdpi-item-check">
-        <input type="checkbox" id="enableLookup">
-        Internet metadata lookup
-      </label>
-      <div class="sdpi-info">Enriches missing metadata from public databases (TMDB, MusicBrainz, Open Library). E.g. "simpsons 1" → "The Simpsons (1989) - S01E01 - Simpsons Roasting on an Open Fire".</div>
-    </div>
+        <div class="sdpi-item">
+          <label class="sdpi-item-check">
+            <input type="checkbox" id="enableLookup">
+            Enable lookups (TMDB, MusicBrainz, Open Library)
+          </label>
+        </div>
 
-    <div class="sdpi-item" id="tmdbKeyGroup" style="display:none">
-      <label class="sdpi-item-label" for="tmdbApiKey">TMDB API Key</label>
-      <input type="password" id="tmdbApiKey" placeholder="Free key from themoviedb.org">
-      <div class="sdpi-info">Required for TV/Movie/Anime lookups. Get a free key at <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org</a>.</div>
-    </div>
-
-    <hr class="sdpi-divider">
-
-    <div class="sdpi-info" style="margin-bottom: 6px">
-      <strong>What the Healer fixes:</strong>
-    </div>
-
-    <div class="sdpi-info">
-      ✓ Missing release years in movie filenames<br>
-      ✓ Missing season/episode numbers in TV files<br>
-      ✓ Generic filenames (untitled, video, track 01)<br>
-      ✓ Scene group junk tokens (YIFY, RARBG, etc.)<br>
-      ✓ Inconsistent naming across a collection<br>
-      ✓ Wrong file extension casing (.MKV → .mkv)<br>
-      ✓ Missing resolution tags in multi-version movies<br>
-      ✓ Missing episode titles (via TMDB lookup)<br>
-      ✓ Missing years and proper titles (via internet enrichment)
-    </div>
+        <div class="sdpi-item" id="tmdbKeyGroup" style="display:none">
+          <label class="sdpi-item-label" for="tmdbApiKey">TMDB API Key</label>
+          <input type="password" id="tmdbApiKey" placeholder="Free key from themoviedb.org">
+          <div class="sdpi-info">Required for TV/Movie/Anime. Get one free at <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org</a>.</div>
+        </div>
+      </div>
+    </details>
 
     <hr class="sdpi-divider">
 
-    <div class="sdpi-info" style="margin-bottom: 6px">
-      <strong>How it works:</strong>
-    </div>
+    <details class="sdpi-collapse">
+      <summary class="sdpi-collapse-header">What the Healer Fixes</summary>
+      <div class="sdpi-collapse-body">
+        <div class="sdpi-info">
+          ✓ Missing release years in movie filenames<br>
+          ✓ Missing season/episode numbers in TV files<br>
+          ✓ Generic filenames (untitled, video, track 01)<br>
+          ✓ Scene group junk tokens (YIFY, RARBG, etc.)<br>
+          ✓ Inconsistent naming across a collection<br>
+          ✓ Wrong file extension casing (.MKV → .mkv)<br>
+          ✓ Missing resolution tags in multi-version movies<br>
+          ✓ Episode gaps and duplicate episode detection<br>
+          ✓ Lower-quality files in a series<br>
+          ✓ Missing episode titles (via TMDB lookup)<br>
+          ✓ Missing years and proper titles (via internet enrichment)
+        </div>
+      </div>
+    </details>
 
-    <div class="sdpi-info">
-      The healer infers metadata from folder names (e.g. "Breaking Bad (2008)/Season 01/"),
-      sibling files, and NFO companions, then applies consistent naming across the entire collection.
-    </div>
-
-    <hr class="sdpi-divider">
-
-    <div class="sdpi-info">
-      <strong>Short press</strong> – diagnose + heal collection<br>
-      <strong>Long press (&gt;0.5 s)</strong> – dry run (preview in log, no changes)<br>
-      <strong>Dial rotate</strong> – browse diagnosed issues<br>
-      <strong>Dial touch</strong> – diagnose only (no changes)
+    <div class="sdpi-info sdpi-controls-hint">
+      <strong>▶ Press</strong> diagnose + heal &nbsp;·&nbsp; <strong>▶ Hold</strong> dry run<br>
+      <strong>↻ Dial</strong> browse issues &nbsp;·&nbsp; <strong>Tap</strong> diagnose only
     </div>
 
   </div>
 
+  <script src="sdpi-common.js"></script>
   <script>
-    const collectionPathEl = document.getElementById("collectionPath");
-    const targetTypeEl     = document.getElementById("targetType");
-    const pathStatusEl     = document.getElementById("pathStatus");
-    const enableLookupEl   = document.getElementById("enableLookup");
-    const tmdbKeyGroupEl   = document.getElementById("tmdbKeyGroup");
-    const tmdbApiKeyEl     = document.getElementById("tmdbApiKey");
-
-    function validatePath() {
-      const path = collectionPathEl.value.trim();
-      if (!path) {
-        pathStatusEl.className = "";
-        pathStatusEl.textContent = "";
-      } else if (!path.startsWith("/") && !path.match(/^[A-Za-z]:\\/)) {
-        pathStatusEl.className = "sdpi-warning";
-        pathStatusEl.textContent = "Path should be absolute (e.g., /media/movies or C:\\Media\\Movies).";
-      } else {
-        pathStatusEl.className = "sdpi-success";
-        pathStatusEl.textContent = "Ready to diagnose and heal.";
-      }
-    }
+    var collectionPathEl = document.getElementById("collectionPath");
+    var targetTypeEl     = document.getElementById("targetType");
+    var pathStatusEl     = document.getElementById("pathStatus");
+    var enableLookupEl   = document.getElementById("enableLookup");
+    var tmdbKeyGroupEl   = document.getElementById("tmdbKeyGroup");
+    var tmdbApiKeyEl     = document.getElementById("tmdbApiKey");
 
     function updateLookupVisibility() {
       tmdbKeyGroupEl.style.display = enableLookupEl.checked ? "" : "none";
     }
 
-    function loadSettings(settings) {
-      if (settings.collectionPath !== undefined) collectionPathEl.value = settings.collectionPath;
-      if (settings.targetType !== undefined) targetTypeEl.value = settings.targetType;
-      if (settings.enableLookup !== undefined) enableLookupEl.checked = settings.enableLookup;
-      if (settings.tmdbApiKey !== undefined) tmdbApiKeyEl.value = settings.tmdbApiKey;
-      validatePath();
+    function gatherSettings() {
+      return {
+        collectionPath: collectionPathEl.value.trim(),
+        targetType:     targetTypeEl.value,
+        enableLookup:   enableLookupEl.checked,
+        tmdbApiKey:     tmdbApiKeyEl.value.trim()
+      };
+    }
+
+    function onSettingsLoaded(s) {
+      if (s.collectionPath !== undefined) collectionPathEl.value = s.collectionPath;
+      if (s.targetType !== undefined) targetTypeEl.value = s.targetType;
+      if (s.enableLookup !== undefined) enableLookupEl.checked = s.enableLookup;
+      if (s.tmdbApiKey !== undefined) tmdbApiKeyEl.value = s.tmdbApiKey;
+      validatePath(collectionPathEl, pathStatusEl, "Ready to diagnose and heal.");
       updateLookupVisibility();
     }
 
-    function saveSettings() {
-      window.sendToPlugin({
-        event: "setSettings",
-        payload: {
-          collectionPath: collectionPathEl.value.trim(),
-          targetType:     targetTypeEl.value,
-          enableLookup:   enableLookupEl.checked,
-          tmdbApiKey:     tmdbApiKeyEl.value.trim()
-        }
+    function onPiConnected() {
+      collectionPathEl.addEventListener("input", function () {
+        validatePath(collectionPathEl, pathStatusEl, "Ready to diagnose and heal.");
+        saveSettings(gatherSettings());
       });
-    }
-
-    function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
-      const websocket = new WebSocket("ws://127.0.0.1:" + inPort);
-      const actionInfo = JSON.parse(inActionInfo);
-      const settings = actionInfo.payload?.settings ?? {};
-      loadSettings(settings);
-
-      websocket.onopen = () => {
-        websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: inPropertyInspectorUUID }));
-      };
-
-      websocket.onmessage = (evt) => {
-        const msg = JSON.parse(evt.data);
-        if (msg.event === "didReceiveSettings") {
-          loadSettings(msg.payload.settings ?? {});
-        }
-      };
-
-      window.sendToPlugin = (payload) => {
-        websocket.send(JSON.stringify({
-          event:   "setSettings",
-          context: inPropertyInspectorUUID,
-          payload: payload.payload
-        }));
-      };
-
-      collectionPathEl.addEventListener("input", () => { validatePath(); saveSettings(); });
-      targetTypeEl.addEventListener("change", saveSettings);
-      enableLookupEl.addEventListener("change", () => { updateLookupVisibility(); saveSettings(); });
-      tmdbApiKeyEl.addEventListener("input", saveSettings);
+      targetTypeEl.addEventListener("change", function () { saveSettings(gatherSettings()); });
+      enableLookupEl.addEventListener("change", function () { updateLookupVisibility(); saveSettings(gatherSettings()); });
+      tmdbApiKeyEl.addEventListener("input", function () { saveSettings(gatherSettings()); });
     }
   </script>
 </body>

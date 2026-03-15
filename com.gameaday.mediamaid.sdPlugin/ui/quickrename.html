@@ -9,6 +9,18 @@
 <body>
   <div class="sdpi-wrapper">
 
+    <!-- Getting started -->
+    <details class="sdpi-collapse" open>
+      <summary class="sdpi-collapse-header">Getting Started</summary>
+      <div class="sdpi-collapse-body">
+        <div class="sdpi-info">
+          1. Set a <strong>Target Folder</strong> below<br>
+          2. Pick a <strong>Naming Standard</strong> that matches your library<br>
+          3. Press the button to rename — or long-press for a safe dry run first
+        </div>
+      </div>
+    </details>
+
     <div class="sdpi-item">
       <label class="sdpi-item-label" for="folderPath">Target Folder</label>
       <input type="text" id="folderPath" placeholder="/path/to/your/media/folder">
@@ -18,28 +30,28 @@
     <div class="sdpi-item">
       <label class="sdpi-item-label" for="mediaType">Naming Standard</label>
       <select id="mediaType">
-        <optgroup label="Video Libraries (Jellyfin / Plex)">
+        <optgroup label="🎬 Video Libraries (Jellyfin / Plex)">
           <option value="jellyfin_tv">TV Show — S01E01 format</option>
-          <option value="jellyfin_movie">Movie — Title (Year) format</option>
-          <option value="jellyfin_movie_version">Movie Multi-Version — Title (Year) [Resolution]</option>
+          <option value="jellyfin_movie">Movie — Title (Year)</option>
+          <option value="jellyfin_movie_version">Movie Multi-Version — [Resolution Source HDR]</option>
           <option value="anime">Anime — Absolute Episode Numbering</option>
         </optgroup>
-        <optgroup label="Media Archives">
+        <optgroup label="📦 Media Archives">
           <option value="photography">Photography — Date + Location</option>
-          <option value="music">Music — Track# Artist Song (Jellyfin-compatible)</option>
-          <option value="books">Books / eBooks — Author Title (Jellyfin-compatible)</option>
+          <option value="music">Music — Track# Artist Song</option>
+          <option value="books">Books / eBooks — Author Title</option>
           <option value="comics">Comics / Manga — Kavita-compatible</option>
           <option value="generic_docs">Documents — Date Prefixed</option>
         </optgroup>
-        <optgroup label="Download Archives">
+        <optgroup label="📥 Download Archives">
           <option value="youtube_archive">YouTube / Download Archive</option>
           <option value="podcast_archive">Podcast Archive — Show / Episode</option>
           <option value="date_hierarchy">Date Hierarchy — YYYY/MM-DD folders</option>
         </optgroup>
-        <optgroup label="Emulation">
+        <optgroup label="🎮 Emulation">
           <option value="emulation_roms">ROMs — By Platform</option>
         </optgroup>
-        <optgroup label="Advanced">
+        <optgroup label="⚙️ Advanced">
           <option value="custom">Custom Template</option>
         </optgroup>
       </select>
@@ -52,7 +64,7 @@
     </div>
 
     <div class="sdpi-item">
-      <label class="sdpi-item-label">Format Preview</label>
+      <label class="sdpi-item-label">Preview</label>
       <div class="preview-box" id="formatPreview">Show Name - S01E01 - Episode Title.mkv</div>
     </div>
 
@@ -68,34 +80,39 @@
       <div class="sdpi-info">Also moves files into organised subfolders (e.g., Season 01, Artist/Album).</div>
     </div>
 
+    <!-- Advanced settings -->
+    <details class="sdpi-collapse">
+      <summary class="sdpi-collapse-header">Internet Metadata Lookup</summary>
+      <div class="sdpi-collapse-body">
+        <div class="sdpi-info" style="margin-bottom:8px">Enriches missing metadata from public databases when local parsing leaves gaps. Only fires when needed.</div>
+
+        <div class="sdpi-item">
+          <label class="sdpi-item-check">
+            <input type="checkbox" id="enableLookup">
+            Enable lookups (TMDB, MusicBrainz, Open Library)
+          </label>
+        </div>
+
+        <div class="sdpi-item" id="tmdbKeyGroup" style="display:none">
+          <label class="sdpi-item-label" for="tmdbApiKey">TMDB API Key</label>
+          <input type="password" id="tmdbApiKey" placeholder="Free key from themoviedb.org">
+          <div class="sdpi-info">Required for TV/Movie/Anime. Get one free at <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org</a>. Music &amp; Book lookups need no key.</div>
+        </div>
+      </div>
+    </details>
+
     <hr class="sdpi-divider">
 
-    <div class="sdpi-item">
-      <label class="sdpi-item-check">
-        <input type="checkbox" id="enableLookup">
-        Internet metadata lookup
-      </label>
-      <div class="sdpi-info">When enabled, enriches missing metadata (titles, years, episode names) from public databases: TMDB (TV/Movies), MusicBrainz (Music), Open Library (Books). Only fires when local parsing leaves gaps.</div>
-    </div>
-
-    <div class="sdpi-item" id="tmdbKeyGroup" style="display:none">
-      <label class="sdpi-item-label" for="tmdbApiKey">TMDB API Key</label>
-      <input type="password" id="tmdbApiKey" placeholder="Enter your free TMDB API key">
-      <div class="sdpi-info">Required for TV/Movie/Anime lookups. Get a free key at <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org/settings/api</a>. Music and Book lookups work without a key.</div>
-    </div>
-
-    <hr class="sdpi-divider">
-
-    <div class="sdpi-info">
-      <strong>Short press</strong> – rename files<br>
-      <strong>Long press (&gt;0.5 s)</strong> – dry run (preview in log, no changes)<br>
-      <strong>Dial rotate</strong> – cycle naming pattern
+    <div class="sdpi-info sdpi-controls-hint">
+      <strong>▶ Press</strong> rename &nbsp;·&nbsp; <strong>▶ Hold</strong> dry run<br>
+      <strong>↻ Dial</strong> cycle pattern
     </div>
 
   </div>
 
+  <script src="sdpi-common.js"></script>
   <script>
-    const DESCRIPTIONS = {
+    var DESCRIPTIONS = {
       jellyfin_tv:            "Renames TV episodes to SxxExx format for Jellyfin/Plex. Extracts show name, season, episode number, and episode title from filenames and NFO files.",
       jellyfin_movie:         "Renames movie files to 'Title (Year)' for Jellyfin/Plex. Extracts year from filename or parent folder.",
       jellyfin_movie_version: "For multiple quality versions of the same movie. Adds [Resolution Source HDR] version tags per Jellyfin multi-version spec.",
@@ -112,7 +129,7 @@
       custom:                 "Build your own naming pattern using template tokens. See the token reference above."
     };
 
-    const PREVIEWS = {
+    var PREVIEWS = {
       jellyfin_tv:            "Show Name - S01E02 - Episode Title.mkv",
       jellyfin_movie:         "Movie Title (2024).mkv",
       jellyfin_movie_version: "Movie Title (2024) - [1080p Bluray].mkv → Movie Title (2024)/",
@@ -129,28 +146,28 @@
       custom:                 ""
     };
 
-    const HAS_FOLDER = {
+    var HAS_FOLDER = {
       jellyfin_tv: true, jellyfin_movie: true, jellyfin_movie_version: true,
       anime: true, photography: false, music: true, books: true, comics: true,
       generic_docs: false, youtube_archive: true, podcast_archive: true,
       date_hierarchy: true, emulation_roms: true, custom: false
     };
 
-    const folderPathEl    = document.getElementById("folderPath");
-    const mediaTypeEl     = document.getElementById("mediaType");
-    const createFSEl      = document.getElementById("createFolderStructure");
-    const previewEl       = document.getElementById("formatPreview");
-    const pathStatusEl    = document.getElementById("pathStatus");
-    const customFormatEl  = document.getElementById("customFormat");
-    const customGroupEl   = document.getElementById("customFormatGroup");
-    const formatDescEl    = document.getElementById("formatDescText");
-    const enableLookupEl  = document.getElementById("enableLookup");
-    const tmdbKeyGroupEl  = document.getElementById("tmdbKeyGroup");
-    const tmdbApiKeyEl    = document.getElementById("tmdbApiKey");
+    var folderPathEl    = document.getElementById("folderPath");
+    var mediaTypeEl     = document.getElementById("mediaType");
+    var createFSEl      = document.getElementById("createFolderStructure");
+    var previewEl       = document.getElementById("formatPreview");
+    var pathStatusEl    = document.getElementById("pathStatus");
+    var customFormatEl  = document.getElementById("customFormat");
+    var customGroupEl   = document.getElementById("customFormatGroup");
+    var formatDescEl    = document.getElementById("formatDescText");
+    var enableLookupEl  = document.getElementById("enableLookup");
+    var tmdbKeyGroupEl  = document.getElementById("tmdbKeyGroup");
+    var tmdbApiKeyEl    = document.getElementById("tmdbApiKey");
 
     function updatePreview() {
-      const type = mediaTypeEl.value;
-      const isCustom = type === "custom";
+      var type = mediaTypeEl.value;
+      var isCustom = type === "custom";
       customGroupEl.style.display = isCustom ? "" : "none";
       if (isCustom) {
         previewEl.textContent = customFormatEl.value || "{title} - S{season}E{episode}{ext}";
@@ -162,79 +179,41 @@
       tmdbKeyGroupEl.style.display = enableLookupEl.checked ? "" : "none";
     }
 
-    function validatePath() {
-      const path = folderPathEl.value.trim();
-      if (!path) {
-        pathStatusEl.className = "";
-        pathStatusEl.textContent = "";
-      } else if (!path.startsWith("/") && !path.match(/^[A-Za-z]:\\/)) {
-        pathStatusEl.className = "sdpi-warning";
-        pathStatusEl.textContent = "Path should be absolute (e.g., /media/tv or C:\\Media\\TV).";
-      } else {
-        pathStatusEl.className = "sdpi-success";
-        pathStatusEl.textContent = "Path looks valid. Files will be renamed on button press.";
-      }
+    function gatherSettings() {
+      return {
+        folderPath:            folderPathEl.value.trim(),
+        mediaType:             mediaTypeEl.value,
+        createFolderStructure: createFSEl.checked,
+        customFormat:          customFormatEl.value.trim(),
+        enableLookup:          enableLookupEl.checked,
+        tmdbApiKey:            tmdbApiKeyEl.value.trim()
+      };
     }
 
-    function loadSettings(settings) {
-      if (settings.folderPath !== undefined) folderPathEl.value = settings.folderPath;
-      if (settings.mediaType  !== undefined) mediaTypeEl.value  = settings.mediaType;
-      if (settings.createFolderStructure !== undefined) createFSEl.checked = settings.createFolderStructure;
-      if (settings.customFormat !== undefined) customFormatEl.value = settings.customFormat;
-      if (settings.enableLookup !== undefined) enableLookupEl.checked = settings.enableLookup;
-      if (settings.tmdbApiKey !== undefined) tmdbApiKeyEl.value = settings.tmdbApiKey;
+    function onSettingsLoaded(s) {
+      if (s.folderPath !== undefined) folderPathEl.value = s.folderPath;
+      if (s.mediaType  !== undefined) mediaTypeEl.value  = s.mediaType;
+      if (s.createFolderStructure !== undefined) createFSEl.checked = s.createFolderStructure;
+      if (s.customFormat !== undefined) customFormatEl.value = s.customFormat;
+      if (s.enableLookup !== undefined) enableLookupEl.checked = s.enableLookup;
+      if (s.tmdbApiKey !== undefined) tmdbApiKeyEl.value = s.tmdbApiKey;
       updatePreview();
-      validatePath();
+      validatePath(folderPathEl, pathStatusEl, "Path looks valid. Files will be renamed on button press.");
     }
 
-    function saveSettings() {
-      window.sendToPlugin({
-        event: "setSettings",
-        payload: {
-          folderPath:            folderPathEl.value.trim(),
-          mediaType:             mediaTypeEl.value,
-          createFolderStructure: createFSEl.checked,
-          customFormat:          customFormatEl.value.trim(),
-          enableLookup:          enableLookupEl.checked,
-          tmdbApiKey:            tmdbApiKeyEl.value.trim()
-        }
+    function onPiConnected() {
+      folderPathEl.addEventListener("input", function () {
+        validatePath(folderPathEl, pathStatusEl, "Path looks valid. Files will be renamed on button press.");
+        saveSettings(gatherSettings());
       });
+      mediaTypeEl.addEventListener("change", function () { updatePreview(); saveSettings(gatherSettings()); });
+      createFSEl.addEventListener("change", function () { saveSettings(gatherSettings()); });
+      customFormatEl.addEventListener("input", function () { updatePreview(); saveSettings(gatherSettings()); });
+      enableLookupEl.addEventListener("change", function () { updatePreview(); saveSettings(gatherSettings()); });
+      tmdbApiKeyEl.addEventListener("input", function () { saveSettings(gatherSettings()); });
     }
 
-    function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
-      const websocket = new WebSocket("ws://127.0.0.1:" + inPort);
-      const actionInfo = JSON.parse(inActionInfo);
-      const settings = actionInfo.payload?.settings ?? {};
-      loadSettings(settings);
-
-      websocket.onopen = () => {
-        websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: inPropertyInspectorUUID }));
-      };
-
-      websocket.onmessage = (evt) => {
-        const msg = JSON.parse(evt.data);
-        if (msg.event === "didReceiveSettings") {
-          loadSettings(msg.payload.settings ?? {});
-        }
-      };
-
-      window.sendToPlugin = (payload) => {
-        websocket.send(JSON.stringify({
-          event:   "setSettings",
-          context: inPropertyInspectorUUID,
-          payload: payload.payload
-        }));
-      };
-
-      folderPathEl.addEventListener("input", () => { validatePath(); saveSettings(); });
-      mediaTypeEl.addEventListener("change", () => { updatePreview(); saveSettings(); });
-      createFSEl.addEventListener("change", saveSettings);
-      customFormatEl.addEventListener("input", () => { updatePreview(); saveSettings(); });
-      enableLookupEl.addEventListener("change", () => { updatePreview(); saveSettings(); });
-      tmdbApiKeyEl.addEventListener("input", saveSettings);
-    }
-
-    mediaTypeEl.addEventListener("change", updatePreview);
+    // Initial render
     updatePreview();
   </script>
 </body>
