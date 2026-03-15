@@ -45,6 +45,22 @@
 
     <hr class="sdpi-divider">
 
+    <div class="sdpi-item">
+      <label class="sdpi-item-check">
+        <input type="checkbox" id="enableLookup">
+        Internet metadata lookup
+      </label>
+      <div class="sdpi-info">Enriches missing metadata from public databases (TMDB, MusicBrainz, Open Library). E.g. "simpsons 1" → "The Simpsons (1989) - S01E01 - Simpsons Roasting on an Open Fire".</div>
+    </div>
+
+    <div class="sdpi-item" id="tmdbKeyGroup" style="display:none">
+      <label class="sdpi-item-label" for="tmdbApiKey">TMDB API Key</label>
+      <input type="password" id="tmdbApiKey" placeholder="Free key from themoviedb.org">
+      <div class="sdpi-info">Required for TV/Movie/Anime lookups. Get a free key at <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org</a>.</div>
+    </div>
+
+    <hr class="sdpi-divider">
+
     <div class="sdpi-info" style="margin-bottom: 6px">
       <strong>What the Healer fixes:</strong>
     </div>
@@ -56,7 +72,9 @@
       ✓ Scene group junk tokens (YIFY, RARBG, etc.)<br>
       ✓ Inconsistent naming across a collection<br>
       ✓ Wrong file extension casing (.MKV → .mkv)<br>
-      ✓ Missing resolution tags in multi-version movies
+      ✓ Missing resolution tags in multi-version movies<br>
+      ✓ Missing episode titles (via TMDB lookup)<br>
+      ✓ Missing years and proper titles (via internet enrichment)
     </div>
 
     <hr class="sdpi-divider">
@@ -85,6 +103,9 @@
     const collectionPathEl = document.getElementById("collectionPath");
     const targetTypeEl     = document.getElementById("targetType");
     const pathStatusEl     = document.getElementById("pathStatus");
+    const enableLookupEl   = document.getElementById("enableLookup");
+    const tmdbKeyGroupEl   = document.getElementById("tmdbKeyGroup");
+    const tmdbApiKeyEl     = document.getElementById("tmdbApiKey");
 
     function validatePath() {
       const path = collectionPathEl.value.trim();
@@ -100,10 +121,17 @@
       }
     }
 
+    function updateLookupVisibility() {
+      tmdbKeyGroupEl.style.display = enableLookupEl.checked ? "" : "none";
+    }
+
     function loadSettings(settings) {
       if (settings.collectionPath !== undefined) collectionPathEl.value = settings.collectionPath;
       if (settings.targetType !== undefined) targetTypeEl.value = settings.targetType;
+      if (settings.enableLookup !== undefined) enableLookupEl.checked = settings.enableLookup;
+      if (settings.tmdbApiKey !== undefined) tmdbApiKeyEl.value = settings.tmdbApiKey;
       validatePath();
+      updateLookupVisibility();
     }
 
     function saveSettings() {
@@ -111,7 +139,9 @@
         event: "setSettings",
         payload: {
           collectionPath: collectionPathEl.value.trim(),
-          targetType:     targetTypeEl.value
+          targetType:     targetTypeEl.value,
+          enableLookup:   enableLookupEl.checked,
+          tmdbApiKey:     tmdbApiKeyEl.value.trim()
         }
       });
     }
@@ -143,6 +173,8 @@
 
       collectionPathEl.addEventListener("input", () => { validatePath(); saveSettings(); });
       targetTypeEl.addEventListener("change", saveSettings);
+      enableLookupEl.addEventListener("change", () => { updateLookupVisibility(); saveSettings(); });
+      tmdbApiKeyEl.addEventListener("input", saveSettings);
     }
   </script>
 </body>

@@ -34,6 +34,7 @@ import { MediaType, getPattern, ALL_PATTERNS, createCustomPattern, DEFAULT_CUSTO
 import { renameFolder, organizeWithFolderStructure } from "../lib/renamer.js";
 import { getLogFilePath } from "../lib/logger.js";
 import { LONG_PRESS_MS } from "../lib/config.js";
+import type { LookupConfig } from "../lib/metadata-lookup.js";
 
 export interface QuickRenameSettings {
   [key: string]: JsonValue;
@@ -45,6 +46,10 @@ export interface QuickRenameSettings {
   createFolderStructure: boolean;
   /** Custom format template string (used when mediaType is "custom") */
   customFormat: string;
+  /** Whether to enable internet metadata lookups */
+  enableLookup: boolean;
+  /** TMDB API key for TV/Movie/Anime lookups */
+  tmdbApiKey: string;
 }
 
 const PATTERN_CYCLE = ALL_PATTERNS.map(p => p.mediaType);
@@ -195,7 +200,11 @@ export class QuickRenameAction extends SingletonAction<QuickRenameSettings> {
         ? organizeWithFolderStructure
         : renameFolder;
 
-      const result = await fn(settings.folderPath, pattern, dryRun);
+      const lookupConfig: LookupConfig | undefined = settings.enableLookup
+        ? { enabled: true, tmdbApiKey: settings.tmdbApiKey || undefined }
+        : undefined;
+
+      const result = await fn(settings.folderPath, pattern, dryRun, lookupConfig);
       const hasErrors = Object.keys(result.errors).length > 0;
 
       if (hasErrors) {

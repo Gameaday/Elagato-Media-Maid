@@ -33,6 +33,7 @@ import {
 import { findAndParseNfo } from "./nfo-parser.js";
 import { logOperation } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
+import { enrichMetadata, type LookupConfig } from "./metadata-lookup.js";
 import {
   VIDEO_EXTS,
   PHOTO_EXTS,
@@ -1113,18 +1114,94 @@ export function buildHealedName(
 }
 
 /**
+ * Async version of buildHealedName that enriches metadata from internet
+ * lookups when local parsing leaves gaps. Falls back to buildHealedName
+ * when lookups are disabled or unavailable.
+ */
+export async function buildHealedNameWithLookup(
+  filePath: string,
+  mediaType: MediaType,
+  context: FolderContext,
+  lookupConfig?: LookupConfig
+): Promise<string | null> {
+  if (!lookupConfig?.enabled) {
+    return buildHealedName(filePath, mediaType, context);
+  }
+
+  const ext = extname(filePath).toLowerCase();
+  const baseName = basename(filePath, ext);
+  const pattern = getPattern(mediaType);
+  if (!pattern) return null;
+  if (!pattern.extensions.includes(ext)) return null;
+
+  // Build metadata from the filename, then enrich from context (same as buildHealedName)
+  const meta: FileMetadata = { baseName, ext, originalPath: filePath };
+
+  switch (mediaType) {
+    case MediaType.JELLYFIN_TV: {
+      const parsed = parseTvPattern(baseName);
+      Object.assign(meta, parsed);
+      if (context.title) meta.title = context.title;
+      if (context.season !== undefined) meta.season = context.season;
+      if (!meta.year && context.year) meta.year = context.year;
+      break;
+    }
+    case MediaType.JELLYFIN_MOVIE:
+    case MediaType.JELLYFIN_MOVIE_VERSION: {
+      const title = parseMovieTitle(baseName);
+      meta.title = context.title ?? title;
+      meta.year = parseYearFromFilename(baseName) ?? context.year;
+      meta.resolution = parseResolutionFromFilename(baseName);
+      meta.source = parseSourceFromFilename(baseName);
+      meta.hdr = parseHdrFromFilename(baseName);
+      meta.versionTag = buildVersionTag(baseName);
+      break;
+    }
+    case MediaType.MUSIC: {
+      const parsed = parseMusicPattern(baseName);
+      Object.assign(meta, parsed);
+      if (context.title) meta.artist = context.title;
+      if (!meta.year && context.year) meta.year = context.year;
+      break;
+    }
+    case MediaType.BOOKS: {
+      const parsed = parseMusicPattern(baseName);
+      Object.assign(meta, parsed);
+      if (context.title && !meta.artist) meta.artist = context.title;
+      if (!meta.year && context.year) meta.year = context.year;
+      break;
+    }
+    default:
+      return buildHealedName(filePath, mediaType, context);
+  }
+
+  if (!meta.title) meta.title = baseName;
+
+  // Enrich from internet lookups
+  const enriched = await enrichMetadata(meta, mediaType, lookupConfig);
+
+  const expectedName = pattern.format(enriched);
+  const currentName = basename(filePath);
+
+  if (currentName === expectedName) return null;
+  return expectedName;
+}
+
+/**
  * Heal an entire collection by applying inferred metadata and consistent
  * naming patterns across all files.
  *
  * @param collectionPath - Root directory of the collection.
  * @param dryRun         - If true, no files are actually renamed.
  * @param targetType     - Override the auto-detected media type.
+ * @param lookupConfig   - Optional internet lookup config for metadata enrichment.
  * @returns              - Summary of healing operations performed.
  */
 export async function healCollection(
   collectionPath: string,
   dryRun = false,
-  targetType?: MediaType
+  targetType?: MediaType,
+  lookupConfig?: LookupConfig
 ): Promise<HealResult> {
   const result: HealResult = {
     filesExamined: 0,
@@ -1190,7 +1267,9 @@ export async function healCollection(
       // ignore NFO errors
     }
 
-    const healedName = buildHealedName(filePath, mediaType, context);
+    const healedName = lookupConfig?.enabled
+      ? await buildHealedNameWithLookup(filePath, mediaType, context, lookupConfig)
+      : buildHealedName(filePath, mediaType, context);
     if (!healedName) {
       result.skipped++;
       continue;

@@ -13,6 +13,7 @@ import { findAndParseNfo } from "./nfo-parser.js";
 import { logOperation } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
 import { validateFolderPath, RELEASE_TAG_RE, ROM_TAG_RE, ROM_REGION_RE, PLATFORM_MAP, RESOLUTION_RE, RESOLUTION_LABELS, SOURCE_TAG_RE, SOURCE_LABELS, HDR_TAG_RE, HDR_LABELS, YOUTUBE_ID_RE, ABSOLUTE_EPISODE_RE, COMIC_VOLUME_RE, COMIC_CHAPTER_RE } from "./config.js";
+import { enrichMetadata, type LookupConfig } from "./metadata-lookup.js";
 
 /**
  * Extract title and year from a folder name.
@@ -429,11 +430,14 @@ export function parseComicPattern(baseName: string): Partial<FileMetadata> {
  * Build FileMetadata from a filename and any NFO data.
  * NFO data takes precedence over filename parsing.
  * Selects the appropriate parser based on the target pattern's media type.
+ * When a LookupConfig is provided and enabled, missing metadata is enriched
+ * from public APIs (TMDB, MusicBrainz, Open Library) after local parsing.
  */
 async function buildMetadata(
   filePath: string,
   pattern: NamingPattern,
-  index: number
+  index: number,
+  lookupConfig?: LookupConfig
 ): Promise<FileMetadata> {
   const ext = extname(filePath).toLowerCase();
   const baseName = basename(filePath, ext);
@@ -520,6 +524,12 @@ async function buildMetadata(
     merged.artist = folderCtx.title;
   }
 
+  // Enrich from internet lookups when local parsing left gaps.
+  // Only fires when config is enabled and critical fields are missing.
+  if (lookupConfig?.enabled) {
+    return enrichMetadata(merged, pattern.mediaType, lookupConfig);
+  }
+
   return merged;
 }
 
@@ -558,15 +568,17 @@ async function deconflict(proposedPath: string, existingFiles: Set<string>): Pro
 /**
  * Apply a naming pattern to all matching files in a folder.
  *
- * @param folderPath - The directory to operate on.
- * @param pattern    - The naming pattern to apply.
- * @param dryRun     - If true, no files are actually renamed.
- * @returns          - Summary of operations performed.
+ * @param folderPath    - The directory to operate on.
+ * @param pattern       - The naming pattern to apply.
+ * @param dryRun        - If true, no files are actually renamed.
+ * @param lookupConfig  - Optional internet lookup config for metadata enrichment.
+ * @returns             - Summary of operations performed.
  */
 export async function renameFolder(
   folderPath: string,
   pattern: NamingPattern,
-  dryRun = false
+  dryRun = false,
+  lookupConfig?: LookupConfig
 ): Promise<RenameResult> {
   const result: RenameResult = {
     operations: [],
@@ -617,7 +629,7 @@ export async function renameFolder(
 
     let meta: FileMetadata;
     try {
-      meta = await buildMetadata(fromPath, pattern, i + 1);
+      meta = await buildMetadata(fromPath, pattern, i + 1, lookupConfig);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       result.errors[name] = `Metadata error: ${msg}`;
@@ -669,18 +681,20 @@ export async function renameFolder(
  * Apply a naming pattern with folder structuring (creates subfolders and moves files).
  * Used for Jellyfin TV and Music patterns.
  *
- * @param libraryRoot - Root of the media library.
- * @param pattern     - Pattern with a folderPath() function.
- * @param dryRun      - If true, no files are actually moved.
+ * @param libraryRoot   - Root of the media library.
+ * @param pattern       - Pattern with a folderPath() function.
+ * @param dryRun        - If true, no files are actually moved.
+ * @param lookupConfig  - Optional internet lookup config for metadata enrichment.
  */
 export async function organizeWithFolderStructure(
   libraryRoot: string,
   pattern: NamingPattern,
-  dryRun = false
+  dryRun = false,
+  lookupConfig?: LookupConfig
 ): Promise<RenameResult> {
   if (!pattern.folderPath) {
     // Fall back to flat rename
-    return renameFolder(libraryRoot, pattern, dryRun);
+    return renameFolder(libraryRoot, pattern, dryRun, lookupConfig);
   }
 
   const result: RenameResult = {
@@ -721,7 +735,7 @@ export async function organizeWithFolderStructure(
 
     let meta: FileMetadata;
     try {
-      meta = await buildMetadata(fromPath, pattern, i + 1);
+      meta = await buildMetadata(fromPath, pattern, i + 1, lookupConfig);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       result.errors[name] = `Metadata error: ${msg}`;

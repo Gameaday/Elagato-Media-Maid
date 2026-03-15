@@ -70,6 +70,22 @@
 
     <hr class="sdpi-divider">
 
+    <div class="sdpi-item">
+      <label class="sdpi-item-check">
+        <input type="checkbox" id="enableLookup">
+        Internet metadata lookup
+      </label>
+      <div class="sdpi-info">When enabled, enriches missing metadata (titles, years, episode names) from public databases: TMDB (TV/Movies), MusicBrainz (Music), Open Library (Books). Only fires when local parsing leaves gaps.</div>
+    </div>
+
+    <div class="sdpi-item" id="tmdbKeyGroup" style="display:none">
+      <label class="sdpi-item-label" for="tmdbApiKey">TMDB API Key</label>
+      <input type="password" id="tmdbApiKey" placeholder="Enter your free TMDB API key">
+      <div class="sdpi-info">Required for TV/Movie/Anime lookups. Get a free key at <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org/settings/api</a>. Music and Book lookups work without a key.</div>
+    </div>
+
+    <hr class="sdpi-divider">
+
     <div class="sdpi-info">
       <strong>Short press</strong> – rename files<br>
       <strong>Long press (&gt;0.5 s)</strong> – dry run (preview in log, no changes)<br>
@@ -128,6 +144,9 @@
     const customFormatEl  = document.getElementById("customFormat");
     const customGroupEl   = document.getElementById("customFormatGroup");
     const formatDescEl    = document.getElementById("formatDescText");
+    const enableLookupEl  = document.getElementById("enableLookup");
+    const tmdbKeyGroupEl  = document.getElementById("tmdbKeyGroup");
+    const tmdbApiKeyEl    = document.getElementById("tmdbApiKey");
 
     function updatePreview() {
       const type = mediaTypeEl.value;
@@ -140,6 +159,7 @@
       }
       formatDescEl.textContent = DESCRIPTIONS[type] || "";
       createFSEl.disabled = !HAS_FOLDER[type];
+      tmdbKeyGroupEl.style.display = enableLookupEl.checked ? "" : "none";
     }
 
     function validatePath() {
@@ -161,6 +181,8 @@
       if (settings.mediaType  !== undefined) mediaTypeEl.value  = settings.mediaType;
       if (settings.createFolderStructure !== undefined) createFSEl.checked = settings.createFolderStructure;
       if (settings.customFormat !== undefined) customFormatEl.value = settings.customFormat;
+      if (settings.enableLookup !== undefined) enableLookupEl.checked = settings.enableLookup;
+      if (settings.tmdbApiKey !== undefined) tmdbApiKeyEl.value = settings.tmdbApiKey;
       updatePreview();
       validatePath();
     }
@@ -172,7 +194,9 @@
           folderPath:            folderPathEl.value.trim(),
           mediaType:             mediaTypeEl.value,
           createFolderStructure: createFSEl.checked,
-          customFormat:          customFormatEl.value.trim()
+          customFormat:          customFormatEl.value.trim(),
+          enableLookup:          enableLookupEl.checked,
+          tmdbApiKey:            tmdbApiKeyEl.value.trim()
         }
       });
     }
@@ -206,6 +230,8 @@
       mediaTypeEl.addEventListener("change", () => { updatePreview(); saveSettings(); });
       createFSEl.addEventListener("change", saveSettings);
       customFormatEl.addEventListener("input", () => { updatePreview(); saveSettings(); });
+      enableLookupEl.addEventListener("change", () => { updatePreview(); saveSettings(); });
+      tmdbApiKeyEl.addEventListener("input", saveSettings);
     }
 
     mediaTypeEl.addEventListener("change", updatePreview);
