@@ -13,7 +13,7 @@
 import { execFile } from "child_process";
 import { createWriteStream } from "fs";
 import { readdir, stat, rename } from "fs/promises";
-import { join, extname, basename } from "path";
+import { join, extname, basename, dirname } from "path";
 import { createDeflate } from "zlib";
 import { pipeline } from "stream/promises";
 import { createReadStream } from "fs";
@@ -36,14 +36,20 @@ export interface ToolStatus {
   version?: string;
 }
 
+/** Tool-specific flags used to check availability/version */
+const TOOL_VERSION_FLAGS: Record<string, string[]> = {
+  ffmpeg:  ["-version"],
+  chdman:  [],             // chdman prints help/version with no arguments
+  "7z":    ["--help"]
+};
+
 /**
  * Check if an external tool is available on the system PATH.
  * Returns availability and version info.
  */
 export function detectTool(toolName: string): Promise<ToolStatus> {
   return new Promise((resolve) => {
-    const versionFlag = toolName === "chdman" ? "" : "-version";
-    const args = versionFlag ? [versionFlag] : [];
+    const args = TOOL_VERSION_FLAGS[toolName] ?? ["-version"];
 
     execFile(toolName, args, { timeout: 5000 }, (err, stdout, stderr) => {
       if (err) {
@@ -69,6 +75,11 @@ export async function detectAllTools(): Promise<ToolStatus[]> {
 }
 
 // ── Compression results ────────────────────────────────────────────
+
+/** Estimated compression ratio for cartridge-based ROMs (40% savings) */
+const CARTRIDGE_COMPRESSION_RATIO = 0.6;
+/** Estimated compression ratio for disc-based ROMs via CHD (30% savings) */
+const DISC_COMPRESSION_RATIO = 0.7;
 
 export interface CompressOperation {
   /** Original file path */
@@ -172,7 +183,10 @@ export async function estimateRomCompression(
   }
 
   // Conservative estimates: 40% savings for cartridge zips, 30% for disc CHD
-  const estimatedSavings = Math.round(cartridgeBytes * 0.4 + discBytes * 0.3);
+  const estimatedSavings = Math.round(
+    cartridgeBytes * (1 - CARTRIDGE_COMPRESSION_RATIO) +
+    discBytes * (1 - DISC_COMPRESSION_RATIO)
+  );
 
   return { cartridgeBytes, discBytes, estimatedSavings };
 }
@@ -233,7 +247,7 @@ export async function compressRoms(
     }
 
     if (dryRun) {
-      const estimatedSize = Math.round(originalSize * 0.6); // ~40% compression
+      const estimatedSize = Math.round(originalSize * CARTRIDGE_COMPRESSION_RATIO); // ~40% compression
       result.operations.push({
         from: fromPath, to: toPath,
         originalSize, compressedSize: estimatedSize,
@@ -285,7 +299,7 @@ export async function compressRoms(
       from: fromPath,
       to: fromPath.replace(/\.[^.]+$/, ".chd"),
       originalSize,
-      compressedSize: Math.round(originalSize * 0.7),
+      compressedSize: Math.round(originalSize * DISC_COMPRESSION_RATIO),
       skipped: true,
       skipReason: "Disc-based ROM — use chdman for best results"
     });
@@ -330,7 +344,7 @@ export function buildTranscodeCommand(
   if (!preset) return null;
 
   const inputBase = basename(inputPath, extname(inputPath));
-  const dir = outputDir ?? join(inputPath, "..");
+  const dir = outputDir ?? dirname(inputPath);
   const output = join(dir, `${inputBase}${preset.outputExt}`);
 
   // Avoid overwriting input if output extension matches
@@ -364,7 +378,7 @@ export function buildChdConvertCommand(
   }
 
   const inputBase = basename(inputPath, extname(inputPath));
-  const dir = outputDir ?? join(inputPath, "..");
+  const dir = outputDir ?? dirname(inputPath);
   const output = join(dir, `${inputBase}.chd`);
 
   const args = ["createcd", "-i", inputPath, "-o", output];
