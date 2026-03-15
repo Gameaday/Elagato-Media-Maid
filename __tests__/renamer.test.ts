@@ -9,7 +9,7 @@ import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 
 import { parseTvPattern, parseYearFromFilename, parseRomPattern, parseResolutionFromFilename, parseMovieTitle, parseSourceFromFilename, parseHdrFromFilename, buildVersionTag, parseYoutubePattern, parseAnimePattern, parsePodcastPattern, parseComicPattern, renameFolder } from "../src/lib/renamer";
-import { jellyfinTvPattern, jellyfinMoviePattern, jellyfinMovieVersionPattern, emulationRomsPattern } from "../src/lib/patterns";
+import { jellyfinTvPattern, jellyfinMoviePattern, jellyfinMovieVersionPattern, emulationRomsPattern, youtubeArchivePattern, podcastArchivePattern, comicMangaPattern, animePattern, musicPattern } from "../src/lib/patterns";
 
 // ---------------------------------------------------------------------------
 // parseTvPattern
@@ -408,6 +408,150 @@ describe("renameFolder – ROMs", () => {
     writeFileSync(join(tmpDir, "Zelda (Japan) [b].sfc"), "");
     const result = await renameFolder(tmpDir, emulationRomsPattern, true);
     expect(result.operations[0].to).toContain("Zelda (Japan).sfc");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renameFolder – Comics/Manga
+// ---------------------------------------------------------------------------
+describe("renameFolder – Comics", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mediamaid-comic-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("renames comic with volume and chapter in dry run", async () => {
+    writeFileSync(join(tmpDir, "One Piece Vol 01 Ch 001.cbz"), "");
+    const result = await renameFolder(tmpDir, comicMangaPattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("One Piece");
+    expect(result.operations[0].to).toContain("Vol 01");
+    expect(result.operations[0].to).toContain("Ch 001");
+  });
+
+  it("renames comic with issue number", async () => {
+    writeFileSync(join(tmpDir, "Batman #042.cbr"), "");
+    const result = await renameFolder(tmpDir, comicMangaPattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("Batman");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renameFolder – Anime
+// ---------------------------------------------------------------------------
+describe("renameFolder – Anime", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mediamaid-anime-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("renames anime with fansub tags in dry run", async () => {
+    writeFileSync(join(tmpDir, "[SubGroup] Naruto - 42 [1080p].mkv"), "");
+    const result = await renameFolder(tmpDir, animePattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("Naruto");
+    expect(result.operations[0].to).toContain("042");
+  });
+
+  it("renames anime with SxxExx format", async () => {
+    writeFileSync(join(tmpDir, "Attack.on.Titan.S01E025.Episode.Title.mkv"), "");
+    const result = await renameFolder(tmpDir, animePattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("Attack on Titan");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renameFolder – Podcasts
+// ---------------------------------------------------------------------------
+describe("renameFolder – Podcasts", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mediamaid-podcast-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("renames podcast with show-date-episode format in dry run", async () => {
+    writeFileSync(join(tmpDir, "Tech Talk - 2024-03-10 - AI Revolution.mp3"), "");
+    const result = await renameFolder(tmpDir, podcastArchivePattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("Tech Talk");
+    expect(result.operations[0].to).toContain("2024-03-10");
+  });
+
+  it("renames podcast with date-only format", async () => {
+    writeFileSync(join(tmpDir, "2024-06-15 - Great Interview.mp3"), "");
+    const result = await renameFolder(tmpDir, podcastArchivePattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("2024-06-15");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renameFolder – YouTube Archive
+// ---------------------------------------------------------------------------
+describe("renameFolder – YouTube Archive", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mediamaid-youtube-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("renames yt-dlp download with video ID in dry run", async () => {
+    writeFileSync(join(tmpDir, "My Cool Video [dQw4w9WgXcQ].mp4"), "");
+    const result = await renameFolder(tmpDir, youtubeArchivePattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("[dQw4w9WgXcQ]");
+  });
+
+  it("renames YouTube download with channel-title format", async () => {
+    writeFileSync(join(tmpDir, "Tech Channel - How to Code [abc123DEF-_].mp4"), "");
+    const result = await renameFolder(tmpDir, youtubeArchivePattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("How to Code");
+    expect(result.operations[0].to).toContain("[abc123DEF-_]");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renameFolder – Music
+// ---------------------------------------------------------------------------
+describe("renameFolder – Music", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mediamaid-music-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("renames music file with track-artist-song format", async () => {
+    writeFileSync(join(tmpDir, "01 - Led Zeppelin - Stairway to Heaven.flac"), "");
+    const result = await renameFolder(tmpDir, musicPattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("Led Zeppelin");
+    expect(result.operations[0].to).toContain("Stairway to Heaven");
   });
 });
 

@@ -56,6 +56,10 @@
       <div class="preview-box" id="formatPreview">Show Name - S01E01 - Episode Title.mkv</div>
     </div>
 
+    <div class="sdpi-item" id="formatDescription">
+      <div class="sdpi-info" id="formatDescText"></div>
+    </div>
+
     <div class="sdpi-item">
       <label class="sdpi-item-check">
         <input type="checkbox" id="createFolderStructure">
@@ -75,6 +79,23 @@
   </div>
 
   <script>
+    const DESCRIPTIONS = {
+      jellyfin_tv:            "Renames TV episodes to SxxExx format for Jellyfin/Plex. Extracts show name, season, episode number, and episode title from filenames and NFO files.",
+      jellyfin_movie:         "Renames movie files to 'Title (Year)' for Jellyfin/Plex. Extracts year from filename or parent folder.",
+      jellyfin_movie_version: "For multiple quality versions of the same movie. Adds [Resolution Source HDR] version tags per Jellyfin multi-version spec.",
+      anime:                  "Strips fansub group tags [SubGroup] and normalizes episode numbering. Uses absolute numbering (001, 042) for anime libraries. Organizes into Season folders.",
+      photography:            "Renames photos to YYYY-MM-DD_Location_Index format. Extracts dates from EXIF-style filenames.",
+      music:                  "Renames to 'Track# - Artist - Song' format. Organizes into Artist/Album (Year)/ folders per Jellyfin music conventions.",
+      books:                  "Renames to 'Author - Title (Year)' format per Jellyfin book library conventions.",
+      comics:                 "Kavita/ComicRack-compatible naming with Vol/Ch numbering. Organizes into Series/Volume NN/ folders. Handles CBZ, CBR, CB7 formats.",
+      generic_docs:           "Prefixes documents with the current date. Useful for versioned file archival.",
+      youtube_archive:        "Compatible with yt-dlp downloads. Preserves [video_id] for deduplication. Organizes into Channel/Date - Title folders.",
+      podcast_archive:        "Organizes podcast episodes by show name and air date. Parses 'Show - Date - Episode' naming from common podcast apps.",
+      date_hierarchy:         "Universal ISO 8601 archival. Keeps original filenames, organizes into YYYY/YYYY-MM-DD/ folder structure. Works with any file type.",
+      emulation_roms:         "Cleans ROM filenames (strips [!], [b], [h1] scene tags), preserves region tags (USA, Japan), and sorts into platform-specific folders (NES, SNES, GBA...).",
+      custom:                 "Build your own naming pattern using template tokens. See the token reference above."
+    };
+
     const PREVIEWS = {
       jellyfin_tv:            "Show Name - S01E02 - Episode Title.mkv",
       jellyfin_movie:         "Movie Title (2024).mkv",
@@ -106,6 +127,7 @@
     const pathStatusEl    = document.getElementById("pathStatus");
     const customFormatEl  = document.getElementById("customFormat");
     const customGroupEl   = document.getElementById("customFormatGroup");
+    const formatDescEl    = document.getElementById("formatDescText");
 
     function updatePreview() {
       const type = mediaTypeEl.value;
@@ -116,6 +138,7 @@
       } else {
         previewEl.textContent = PREVIEWS[type] || "";
       }
+      formatDescEl.textContent = DESCRIPTIONS[type] || "";
       createFSEl.disabled = !HAS_FOLDER[type];
     }
 

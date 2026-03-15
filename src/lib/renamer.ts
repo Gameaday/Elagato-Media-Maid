@@ -6,13 +6,46 @@
  */
 
 import { rename, mkdir, readdir, stat } from "fs/promises";
-import { join, extname, basename } from "path";
+import { join, extname, basename, dirname } from "path";
 import type { NamingPattern, FileMetadata } from "./patterns.js";
 import { MediaType } from "./patterns.js";
 import { findAndParseNfo } from "./nfo-parser.js";
 import { logOperation } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
 import { validateFolderPath, RELEASE_TAG_RE, ROM_TAG_RE, ROM_REGION_RE, PLATFORM_MAP, RESOLUTION_RE, RESOLUTION_LABELS, SOURCE_TAG_RE, SOURCE_LABELS, HDR_TAG_RE, HDR_LABELS, YOUTUBE_ID_RE, ABSOLUTE_EPISODE_RE, COMIC_VOLUME_RE, COMIC_CHAPTER_RE } from "./config.js";
+
+/**
+ * Extract title and year from a folder name.
+ * Handles patterns like "Title (Year)", "Title - Year", "Season NN".
+ */
+function folderMeta(folderName: string): { title?: string; year?: number; season?: number } {
+  const result: { title?: string; year?: number; season?: number } = {};
+
+  const seasonMatch = /^[Ss]eason\s*(\d{1,3})$/i.exec(folderName);
+  if (seasonMatch) {
+    result.season = parseInt(seasonMatch[1], 10);
+    return result;
+  }
+
+  const titleYear = /^(.+?)\s*[\(\[]?((?:19|20)\d{2})[\)\]]?\s*$/.exec(folderName);
+  if (titleYear) {
+    result.title = titleYear[1].replace(/[_.-]+$/, "").trim();
+    result.year = parseInt(titleYear[2], 10);
+    return result;
+  }
+
+  const titleDash = /^(.+?)\s*-\s*((?:19|20)\d{2})\s*$/.exec(folderName);
+  if (titleDash) {
+    result.title = titleDash[1].trim();
+    result.year = parseInt(titleDash[2], 10);
+    return result;
+  }
+
+  if (folderName.trim()) {
+    result.title = folderName.trim();
+  }
+  return result;
+}
 
 export interface RenameOperation {
   /** Original full path */
@@ -462,6 +495,30 @@ async function buildMetadata(
     chapter: fromComic.chapter,
     dateTaken: fromYoutube.dateTaken ?? fromPodcast.dateTaken
   };
+
+  // Enrich from parent folder context when parsers couldn't extract metadata.
+  // Folder names are a reliable fallback since users typically organise files
+  // into named directories (e.g. "Show Name/", "Artist Name/", "Channel/").
+  const folderCtx = folderMeta(basename(dirname(filePath)));
+
+  if (isPodcastPattern && !merged.showName && folderCtx.title) {
+    merged.showName = folderCtx.title;
+  }
+  if (isYoutubePattern && !merged.uploader && folderCtx.title) {
+    merged.uploader = folderCtx.title;
+  }
+  if (isComicPattern && merged.title === baseName && folderCtx.title) {
+    merged.title = folderCtx.title;
+  }
+  if ((isTvPattern || isAnimePattern) && merged.title === baseName && folderCtx.title) {
+    merged.title = folderCtx.title;
+  }
+  if (isMoviePattern && !merged.year && folderCtx.year) {
+    merged.year = folderCtx.year;
+  }
+  if (isMusicPattern && !merged.artist && folderCtx.title) {
+    merged.artist = folderCtx.title;
+  }
 
   return merged;
 }
