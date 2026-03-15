@@ -9,6 +9,18 @@
 <body>
   <div class="sdpi-wrapper">
 
+    <!-- Getting started -->
+    <details class="sdpi-collapse" open>
+      <summary class="sdpi-collapse-header">Getting Started</summary>
+      <div class="sdpi-collapse-body">
+        <div class="sdpi-info">
+          1. Set a <strong>Target Folder</strong> below<br>
+          2. Pick a <strong>Naming Standard</strong> that matches your library<br>
+          3. Press the button to rename — or long-press for a safe dry run first
+        </div>
+      </div>
+    </details>
+
     <div class="sdpi-item">
       <label class="sdpi-item-label" for="folderPath">Target Folder</label>
       <input type="text" id="folderPath" placeholder="/path/to/your/media/folder">
@@ -18,18 +30,46 @@
     <div class="sdpi-item">
       <label class="sdpi-item-label" for="mediaType">Naming Standard</label>
       <select id="mediaType">
-        <option value="jellyfin_tv">Jellyfin / Plex – TV Show</option>
-        <option value="jellyfin_movie">Jellyfin / Plex – Movie</option>
-        <option value="photography">Photography – Date + Location</option>
-        <option value="music">Music – Track# Artist Song</option>
-        <option value="books">Books / eBooks – Author Title</option>
-        <option value="generic_docs">Documents – Date Prefixed</option>
+        <optgroup label="🎬 Video Libraries (Jellyfin / Plex)">
+          <option value="jellyfin_tv">TV Show — S01E01 format</option>
+          <option value="jellyfin_movie">Movie — Title (Year)</option>
+          <option value="jellyfin_movie_version">Movie Multi-Version — [Resolution Source HDR]</option>
+          <option value="anime">Anime — Absolute Episode Numbering</option>
+        </optgroup>
+        <optgroup label="📦 Media Archives">
+          <option value="photography">Photography — Date + Location</option>
+          <option value="music">Music — Track# Artist Song</option>
+          <option value="books">Books / eBooks — Author Title</option>
+          <option value="comics">Comics / Manga — Kavita-compatible</option>
+          <option value="generic_docs">Documents — Date Prefixed</option>
+        </optgroup>
+        <optgroup label="📥 Download Archives">
+          <option value="youtube_archive">YouTube / Download Archive</option>
+          <option value="podcast_archive">Podcast Archive — Show / Episode</option>
+          <option value="date_hierarchy">Date Hierarchy — YYYY/MM-DD folders</option>
+        </optgroup>
+        <optgroup label="🎮 Emulation">
+          <option value="emulation_roms">ROMs — By Platform</option>
+        </optgroup>
+        <optgroup label="⚙️ Advanced">
+          <option value="custom">Custom Template</option>
+        </optgroup>
       </select>
     </div>
 
+    <div class="sdpi-item" id="customFormatGroup" style="display:none">
+      <label class="sdpi-item-label" for="customFormat">Format Template</label>
+      <input type="text" id="customFormat" placeholder="{title} - S{season}E{episode}{ext}">
+      <div class="sdpi-info">Tokens: {title}, {season}, {episode}, {episodeTitle}, {year}, {artist}, {track}, {song}, {album}, {date}, {location}, {index}, {platform}, {region}, {resolution}, {source}, {hdr}, {versionTag}, {uploader}, {videoId}, {showName}, {volume}, {chapter}, {absoluteEpisode}, {ext}, {baseName}</div>
+    </div>
+
     <div class="sdpi-item">
-      <label class="sdpi-item-label">Format Preview</label>
+      <label class="sdpi-item-label">Preview</label>
       <div class="preview-box" id="formatPreview">Show Name - S01E01 - Episode Title.mkv</div>
+    </div>
+
+    <div class="sdpi-item" id="formatDescription">
+      <div class="sdpi-info" id="formatDescText"></div>
     </div>
 
     <div class="sdpi-item">
@@ -40,107 +80,140 @@
       <div class="sdpi-info">Also moves files into organised subfolders (e.g., Season 01, Artist/Album).</div>
     </div>
 
+    <!-- Advanced settings -->
+    <details class="sdpi-collapse">
+      <summary class="sdpi-collapse-header">Internet Metadata Lookup</summary>
+      <div class="sdpi-collapse-body">
+        <div class="sdpi-info" style="margin-bottom:8px">Enriches missing metadata from public databases when local parsing leaves gaps. Only fires when needed.</div>
+
+        <div class="sdpi-item">
+          <label class="sdpi-item-check">
+            <input type="checkbox" id="enableLookup">
+            Enable lookups (TMDB, MusicBrainz, Open Library)
+          </label>
+        </div>
+
+        <div class="sdpi-item" id="tmdbKeyGroup" style="display:none">
+          <label class="sdpi-item-label" for="tmdbApiKey">TMDB API Key</label>
+          <input type="password" id="tmdbApiKey" placeholder="Free key from themoviedb.org">
+          <div class="sdpi-info">Required for TV/Movie/Anime. Get one free at <a href="https://www.themoviedb.org/settings/api" target="_blank">themoviedb.org</a>. Music &amp; Book lookups need no key.</div>
+        </div>
+      </div>
+    </details>
+
     <hr class="sdpi-divider">
 
-    <div class="sdpi-info">
-      <strong>Short press</strong> – rename files<br>
-      <strong>Long press (&gt;0.5 s)</strong> – dry run (preview in log, no changes)<br>
-      <strong>Dial rotate</strong> – cycle naming pattern
+    <div class="sdpi-info sdpi-controls-hint">
+      <strong>▶ Press</strong> rename &nbsp;·&nbsp; <strong>▶ Hold</strong> dry run<br>
+      <strong>↻ Dial</strong> cycle pattern
     </div>
 
   </div>
 
+  <script src="sdpi-common.js"></script>
   <script>
-    const PREVIEWS = {
-      jellyfin_tv:    "Show Name - S01E02 - Episode Title.mkv",
-      jellyfin_movie: "Movie Title (2024).mkv",
-      photography:    "2024-06-15_Paris_001.jpg",
-      music:          "01 - Artist Name - Song Title.flac",
-      books:          "Author Name - Book Title.epub",
-      generic_docs:   "2024-06-15_Original Filename.pdf"
+    var DESCRIPTIONS = {
+      jellyfin_tv:            "Renames TV episodes to SxxExx format for Jellyfin/Plex. Extracts show name, season, episode number, and episode title from filenames and NFO files.",
+      jellyfin_movie:         "Renames movie files to 'Title (Year)' for Jellyfin/Plex. Extracts year from filename or parent folder.",
+      jellyfin_movie_version: "For multiple quality versions of the same movie. Adds [Resolution Source HDR] version tags per Jellyfin multi-version spec.",
+      anime:                  "Strips fansub group tags [SubGroup] and normalizes episode numbering. Uses absolute numbering (001, 042) for anime libraries. Organizes into Season folders.",
+      photography:            "Renames photos to YYYY-MM-DD_Location_Index format. Extracts dates from EXIF-style filenames.",
+      music:                  "Renames to 'Track# - Artist - Song' format. Organizes into Artist/Album (Year)/ folders per Jellyfin music conventions.",
+      books:                  "Renames to 'Author - Title (Year)' format per Jellyfin book library conventions.",
+      comics:                 "Kavita/ComicRack-compatible naming with Vol/Ch numbering. Organizes into Series/Volume NN/ folders. Handles CBZ, CBR, CB7 formats.",
+      generic_docs:           "Prefixes documents with the current date. Useful for versioned file archival.",
+      youtube_archive:        "Compatible with yt-dlp downloads. Preserves [video_id] for deduplication. Organizes into Channel/Date - Title folders.",
+      podcast_archive:        "Organizes podcast episodes by show name and air date. Parses 'Show - Date - Episode' naming from common podcast apps.",
+      date_hierarchy:         "Universal ISO 8601 archival. Keeps original filenames, organizes into YYYY/YYYY-MM-DD/ folder structure. Works with any file type.",
+      emulation_roms:         "Cleans ROM filenames (strips [!], [b], [h1] scene tags), preserves region tags (USA, Japan), and sorts into platform-specific folders (NES, SNES, GBA...).",
+      custom:                 "Build your own naming pattern using template tokens. See the token reference above."
     };
 
-    const HAS_FOLDER = {
-      jellyfin_tv: true, jellyfin_movie: true, photography: false,
-      music: true, books: true, generic_docs: false
+    var PREVIEWS = {
+      jellyfin_tv:            "Show Name - S01E02 - Episode Title.mkv",
+      jellyfin_movie:         "Movie Title (2024).mkv",
+      jellyfin_movie_version: "Movie Title (2024) - [1080p Bluray].mkv → Movie Title (2024)/",
+      anime:                  "Anime Title - S01E001 - Episode Title.mkv → Anime Title/Season 01/",
+      photography:            "2024-06-15_Paris_001.jpg",
+      music:                  "01 - Artist Name - Song Title.flac → Artist/Album (Year)/",
+      books:                  "Author Name - Book Title (2024).epub → Author Name/",
+      comics:                 "Series Vol 01 Ch 001.cbz → Series/Volume 01/",
+      generic_docs:           "2024-06-15_Original Filename.pdf",
+      youtube_archive:        "2024-01-15 - Video Title [VideoID].mp4 → Channel Name/",
+      podcast_archive:        "Show Name - 2024-03-10 - Episode Title.mp3 → Show Name/",
+      date_hierarchy:         "filename.pdf → 2024/2024-06-15/",
+      emulation_roms:         "Super Mario Bros (USA).nes → NES/",
+      custom:                 ""
     };
 
-    const folderPathEl = document.getElementById("folderPath");
-    const mediaTypeEl  = document.getElementById("mediaType");
-    const createFSEl   = document.getElementById("createFolderStructure");
-    const previewEl    = document.getElementById("formatPreview");
-    const pathStatusEl = document.getElementById("pathStatus");
+    var HAS_FOLDER = {
+      jellyfin_tv: true, jellyfin_movie: true, jellyfin_movie_version: true,
+      anime: true, photography: false, music: true, books: true, comics: true,
+      generic_docs: false, youtube_archive: true, podcast_archive: true,
+      date_hierarchy: true, emulation_roms: true, custom: false
+    };
+
+    var folderPathEl    = document.getElementById("folderPath");
+    var mediaTypeEl     = document.getElementById("mediaType");
+    var createFSEl      = document.getElementById("createFolderStructure");
+    var previewEl       = document.getElementById("formatPreview");
+    var pathStatusEl    = document.getElementById("pathStatus");
+    var customFormatEl  = document.getElementById("customFormat");
+    var customGroupEl   = document.getElementById("customFormatGroup");
+    var formatDescEl    = document.getElementById("formatDescText");
+    var enableLookupEl  = document.getElementById("enableLookup");
+    var tmdbKeyGroupEl  = document.getElementById("tmdbKeyGroup");
+    var tmdbApiKeyEl    = document.getElementById("tmdbApiKey");
 
     function updatePreview() {
-      const type = mediaTypeEl.value;
-      previewEl.textContent = PREVIEWS[type] || "";
-      createFSEl.disabled = !HAS_FOLDER[type];
-    }
-
-    function validatePath() {
-      const path = folderPathEl.value.trim();
-      if (!path) {
-        pathStatusEl.className = "";
-        pathStatusEl.textContent = "";
-      } else if (!path.startsWith("/") && !path.match(/^[A-Za-z]:\\/)) {
-        pathStatusEl.className = "sdpi-warning";
-        pathStatusEl.textContent = "Path should be absolute (e.g., /media/tv or C:\\Media\\TV).";
+      var type = mediaTypeEl.value;
+      var isCustom = type === "custom";
+      customGroupEl.style.display = isCustom ? "" : "none";
+      if (isCustom) {
+        previewEl.textContent = customFormatEl.value || "{title} - S{season}E{episode}{ext}";
       } else {
-        pathStatusEl.className = "sdpi-success";
-        pathStatusEl.textContent = "Path looks valid. Files will be renamed on button press.";
+        previewEl.textContent = PREVIEWS[type] || "";
       }
+      formatDescEl.textContent = DESCRIPTIONS[type] || "";
+      createFSEl.disabled = !HAS_FOLDER[type];
+      tmdbKeyGroupEl.style.display = enableLookupEl.checked ? "" : "none";
     }
 
-    function loadSettings(settings) {
-      if (settings.folderPath !== undefined) folderPathEl.value = settings.folderPath;
-      if (settings.mediaType  !== undefined) mediaTypeEl.value  = settings.mediaType;
-      if (settings.createFolderStructure !== undefined) createFSEl.checked = settings.createFolderStructure;
+    function gatherSettings() {
+      return {
+        folderPath:            folderPathEl.value.trim(),
+        mediaType:             mediaTypeEl.value,
+        createFolderStructure: createFSEl.checked,
+        customFormat:          customFormatEl.value.trim(),
+        enableLookup:          enableLookupEl.checked,
+        tmdbApiKey:            tmdbApiKeyEl.value.trim()
+      };
+    }
+
+    function onSettingsLoaded(s) {
+      if (s.folderPath !== undefined) folderPathEl.value = s.folderPath;
+      if (s.mediaType  !== undefined) mediaTypeEl.value  = s.mediaType;
+      if (s.createFolderStructure !== undefined) createFSEl.checked = s.createFolderStructure;
+      if (s.customFormat !== undefined) customFormatEl.value = s.customFormat;
+      if (s.enableLookup !== undefined) enableLookupEl.checked = s.enableLookup;
+      if (s.tmdbApiKey !== undefined) tmdbApiKeyEl.value = s.tmdbApiKey;
       updatePreview();
-      validatePath();
+      validatePath(folderPathEl, pathStatusEl, "Path looks valid. Files will be renamed on button press.");
     }
 
-    function saveSettings() {
-      window.sendToPlugin({
-        event: "setSettings",
-        payload: {
-          folderPath:            folderPathEl.value.trim(),
-          mediaType:             mediaTypeEl.value,
-          createFolderStructure: createFSEl.checked
-        }
+    function onPiConnected() {
+      folderPathEl.addEventListener("input", function () {
+        validatePath(folderPathEl, pathStatusEl, "Path looks valid. Files will be renamed on button press.");
+        saveSettings(gatherSettings());
       });
+      mediaTypeEl.addEventListener("change", function () { updatePreview(); saveSettings(gatherSettings()); });
+      createFSEl.addEventListener("change", function () { saveSettings(gatherSettings()); });
+      customFormatEl.addEventListener("input", function () { updatePreview(); saveSettings(gatherSettings()); });
+      enableLookupEl.addEventListener("change", function () { updatePreview(); saveSettings(gatherSettings()); });
+      tmdbApiKeyEl.addEventListener("input", function () { saveSettings(gatherSettings()); });
     }
 
-    function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
-      const websocket = new WebSocket("ws://127.0.0.1:" + inPort);
-      const actionInfo = JSON.parse(inActionInfo);
-      const settings = actionInfo.payload?.settings ?? {};
-      loadSettings(settings);
-
-      websocket.onopen = () => {
-        websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: inPropertyInspectorUUID }));
-      };
-
-      websocket.onmessage = (evt) => {
-        const msg = JSON.parse(evt.data);
-        if (msg.event === "didReceiveSettings") {
-          loadSettings(msg.payload.settings ?? {});
-        }
-      };
-
-      window.sendToPlugin = (payload) => {
-        websocket.send(JSON.stringify({
-          event:   "setSettings",
-          context: inPropertyInspectorUUID,
-          payload: payload.payload
-        }));
-      };
-
-      folderPathEl.addEventListener("input", () => { validatePath(); saveSettings(); });
-      mediaTypeEl.addEventListener("change", () => { updatePreview(); saveSettings(); });
-      createFSEl.addEventListener("change", saveSettings);
-    }
-
-    mediaTypeEl.addEventListener("change", updatePreview);
+    // Initial render
     updatePreview();
   </script>
 </body>

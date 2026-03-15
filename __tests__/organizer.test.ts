@@ -106,3 +106,29 @@ describe("sortFolder – multiple file types", () => {
     expect(existsSync(join(tmpDir, "Code", "e.go"))).toBe(true);
   });
 });
+
+describe("sortFolder – ROM files", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = createTmpDir();
+    ["mario.nes", "zelda.sfc", "pokemon.gba"].forEach(f => touch(tmpDir, f));
+  });
+
+  afterEach(() => cleanupDir(tmpDir));
+
+  it("sorts ROM files into ROMs/ folder", async () => {
+    await sortFolder(tmpDir, DEFAULT_SORT_RULES, false, false);
+    expect(existsSync(join(tmpDir, "ROMs", "mario.nes"))).toBe(true);
+    expect(existsSync(join(tmpDir, "ROMs", "zelda.sfc"))).toBe(true);
+    expect(existsSync(join(tmpDir, "ROMs", "pokemon.gba"))).toBe(true);
+  });
+
+  it("reports ROM files in dry run", async () => {
+    const result = await sortFolder(tmpDir, DEFAULT_SORT_RULES, true, false);
+    expect(result.moved["ROMs"]).toContain("mario.nes");
+    expect(result.moved["ROMs"]).toContain("zelda.sfc");
+    expect(result.moved["ROMs"]).toContain("pokemon.gba");
+    expect(result.totalMoved).toBe(3);
+  });
+});

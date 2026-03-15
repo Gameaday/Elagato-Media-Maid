@@ -8,8 +8,8 @@ import { join } from "path";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 
-import { parseTvPattern, parseYearFromFilename, renameFolder } from "../src/lib/renamer";
-import { jellyfinTvPattern, jellyfinMoviePattern } from "../src/lib/patterns";
+import { parseTvPattern, parseYearFromFilename, parseRomPattern, parseResolutionFromFilename, parseMovieTitle, parseSourceFromFilename, parseHdrFromFilename, buildVersionTag, parseYoutubePattern, parseAnimePattern, parsePodcastPattern, parseComicPattern, renameFolder } from "../src/lib/renamer";
+import { jellyfinTvPattern, jellyfinMoviePattern, jellyfinMovieVersionPattern, emulationRomsPattern, youtubeArchivePattern, podcastArchivePattern, comicMangaPattern, animePattern, musicPattern } from "../src/lib/patterns";
 
 // ---------------------------------------------------------------------------
 // parseTvPattern
@@ -59,6 +59,56 @@ describe("parseYearFromFilename", () => {
 
   it("returns undefined when no year present", () => {
     expect(parseYearFromFilename("some title")).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseResolutionFromFilename
+// ---------------------------------------------------------------------------
+describe("parseResolutionFromFilename", () => {
+  it("extracts 1080p", () => {
+    expect(parseResolutionFromFilename("Inception.2010.1080p.BluRay.mkv")).toBe("1080p");
+  });
+
+  it("extracts 720p", () => {
+    expect(parseResolutionFromFilename("Movie.720p.mkv")).toBe("720p");
+  });
+
+  it("normalises 2160p to 4K", () => {
+    expect(parseResolutionFromFilename("Movie.2160p.mkv")).toBe("4K");
+  });
+
+  it("normalises 4K label", () => {
+    expect(parseResolutionFromFilename("Movie.4K.mkv")).toBe("4K");
+  });
+
+  it("extracts 480p", () => {
+    expect(parseResolutionFromFilename("Movie.480p.avi")).toBe("480p");
+  });
+
+  it("returns undefined when no resolution present", () => {
+    expect(parseResolutionFromFilename("Inception")).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseMovieTitle
+// ---------------------------------------------------------------------------
+describe("parseMovieTitle", () => {
+  it("extracts title before year and release tags", () => {
+    expect(parseMovieTitle("Inception.2010.1080p.BluRay.x264")).toBe("Inception");
+  });
+
+  it("extracts multi-word title", () => {
+    expect(parseMovieTitle("The.Dark.Knight.2008.720p")).toBe("The Dark Knight");
+  });
+
+  it("returns baseName when no year/tags present", () => {
+    expect(parseMovieTitle("Inception")).toBe("Inception");
+  });
+
+  it("handles underscores", () => {
+    expect(parseMovieTitle("The_Matrix_1999_1080p")).toBe("The Matrix");
   });
 });
 
@@ -165,6 +215,34 @@ describe("renameFolder – Jellyfin Movie (live)", () => {
   });
 });
 
+describe("renameFolder – Jellyfin Movie Multi-Version (dry run)", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = createTmpDir();
+    writeFileSync(join(tmpDir, "Inception.2010.1080p.BluRay.mkv"), "");
+    writeFileSync(join(tmpDir, "Inception.2010.2160p.WEB-DL.mkv"), "");
+  });
+
+  afterEach(() => cleanupDir(tmpDir));
+
+  it("includes resolution tag in output", async () => {
+    const result = await renameFolder(tmpDir, jellyfinMovieVersionPattern, true);
+    expect(result.operations.length).toBe(2);
+    const names = result.operations.map(op => op.to.split("/").pop() ?? op.to.split("\\").pop());
+    expect(names.some(n => n?.includes("[1080p Bluray]"))).toBe(true);
+    expect(names.some(n => n?.includes("[4K WEBDL]"))).toBe(true);
+  });
+
+  it("both files get year in output", async () => {
+    const result = await renameFolder(tmpDir, jellyfinMovieVersionPattern, true);
+    for (const op of result.operations) {
+      const name = op.to.split("/").pop() ?? op.to.split("\\").pop() ?? "";
+      expect(name).toContain("(2010)");
+    }
+  });
+});
+
 // ---------------------------------------------------------------------------
 // parseTvPattern – extended edge cases
 // ---------------------------------------------------------------------------
@@ -254,5 +332,565 @@ describe("renameFolder – path validation", () => {
   it("returns error for non-existent path", async () => {
     const result = await renameFolder("/nonexistent/path/xyz", jellyfinTvPattern, true);
     expect(Object.keys(result.errors).length).toBeGreaterThan(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseRomPattern
+// ---------------------------------------------------------------------------
+describe("parseRomPattern", () => {
+  it("extracts region from parenthesised tag", () => {
+    const meta = parseRomPattern("Super Mario Bros (USA) [!]", ".nes");
+    expect(meta.region).toBe("USA");
+  });
+
+  it("extracts title by stripping scene and region tags", () => {
+    const meta = parseRomPattern("Super Mario Bros (USA) [!]", ".nes");
+    expect(meta.title).toBe("Super Mario Bros");
+  });
+
+  it("handles multi-region tags", () => {
+    const meta = parseRomPattern("Sonic the Hedgehog (Japan, USA)", ".gen");
+    expect(meta.region).toBe("Japan, USA");
+    expect(meta.title).toBe("Sonic the Hedgehog");
+  });
+
+  it("handles filenames with no tags", () => {
+    const meta = parseRomPattern("Zelda", ".sfc");
+    expect(meta.title).toBe("Zelda");
+    expect(meta.region).toBeUndefined();
+  });
+
+  it("maps extension to platform", () => {
+    const meta = parseRomPattern("Game", ".nes");
+    expect(meta.platform).toBe("NES");
+  });
+
+  it("maps .gba to Game Boy Advance", () => {
+    const meta = parseRomPattern("Game", ".gba");
+    expect(meta.platform).toBe("Game Boy Advance");
+  });
+
+  it("strips multiple scene tags", () => {
+    const meta = parseRomPattern("Game (Europe) [!] [h1]", ".sfc");
+    expect(meta.title).toBe("Game");
+    expect(meta.region).toBe("Europe");
+  });
+
+  it("returns undefined platform for unknown extension", () => {
+    const meta = parseRomPattern("Game", ".xyz");
+    expect(meta.platform).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renameFolder – emulation ROMs
+// ---------------------------------------------------------------------------
+describe("renameFolder – ROMs", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mediamaid-rom-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("renames ROM files and strips scene tags in dry run", async () => {
+    writeFileSync(join(tmpDir, "Super Mario Bros (USA) [!].nes"), "");
+    const result = await renameFolder(tmpDir, emulationRomsPattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("Super Mario Bros (USA).nes");
+  });
+
+  it("preserves region tag in renamed file", async () => {
+    writeFileSync(join(tmpDir, "Zelda (Japan) [b].sfc"), "");
+    const result = await renameFolder(tmpDir, emulationRomsPattern, true);
+    expect(result.operations[0].to).toContain("Zelda (Japan).sfc");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renameFolder – Comics/Manga
+// ---------------------------------------------------------------------------
+describe("renameFolder – Comics", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mediamaid-comic-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("renames comic with volume and chapter in dry run", async () => {
+    writeFileSync(join(tmpDir, "One Piece Vol 01 Ch 001.cbz"), "");
+    const result = await renameFolder(tmpDir, comicMangaPattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("One Piece");
+    expect(result.operations[0].to).toContain("Vol 01");
+    expect(result.operations[0].to).toContain("Ch 001");
+  });
+
+  it("renames comic with issue number", async () => {
+    writeFileSync(join(tmpDir, "Batman #042.cbr"), "");
+    const result = await renameFolder(tmpDir, comicMangaPattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("Batman");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renameFolder – Anime
+// ---------------------------------------------------------------------------
+describe("renameFolder – Anime", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mediamaid-anime-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("renames anime with fansub tags in dry run", async () => {
+    writeFileSync(join(tmpDir, "[SubGroup] Naruto - 42 [1080p].mkv"), "");
+    const result = await renameFolder(tmpDir, animePattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("Naruto");
+    expect(result.operations[0].to).toContain("042");
+  });
+
+  it("renames anime with SxxExx format", async () => {
+    writeFileSync(join(tmpDir, "Attack.on.Titan.S01E025.Episode.Title.mkv"), "");
+    const result = await renameFolder(tmpDir, animePattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("Attack on Titan");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renameFolder – Podcasts
+// ---------------------------------------------------------------------------
+describe("renameFolder – Podcasts", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mediamaid-podcast-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("renames podcast with show-date-episode format in dry run", async () => {
+    writeFileSync(join(tmpDir, "Tech Talk - 2024-03-10 - AI Revolution.mp3"), "");
+    const result = await renameFolder(tmpDir, podcastArchivePattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("Tech Talk");
+    expect(result.operations[0].to).toContain("2024-03-10");
+  });
+
+  it("renames podcast with date-only format", async () => {
+    writeFileSync(join(tmpDir, "2024-06-15 - Great Interview.mp3"), "");
+    const result = await renameFolder(tmpDir, podcastArchivePattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("2024-06-15");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renameFolder – YouTube Archive
+// ---------------------------------------------------------------------------
+describe("renameFolder – YouTube Archive", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mediamaid-youtube-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("renames yt-dlp download with video ID in dry run", async () => {
+    writeFileSync(join(tmpDir, "My Cool Video [dQw4w9WgXcQ].mp4"), "");
+    const result = await renameFolder(tmpDir, youtubeArchivePattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("[dQw4w9WgXcQ]");
+  });
+
+  it("renames YouTube download with channel-title format", async () => {
+    writeFileSync(join(tmpDir, "Tech Channel - How to Code [abc123DEF-_].mp4"), "");
+    const result = await renameFolder(tmpDir, youtubeArchivePattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("How to Code");
+    expect(result.operations[0].to).toContain("[abc123DEF-_]");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// renameFolder – Music
+// ---------------------------------------------------------------------------
+describe("renameFolder – Music", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "mediamaid-music-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("renames music file with track-artist-song format", async () => {
+    writeFileSync(join(tmpDir, "01 - Led Zeppelin - Stairway to Heaven.flac"), "");
+    const result = await renameFolder(tmpDir, musicPattern, true);
+    expect(result.operations.length).toBe(1);
+    expect(result.operations[0].to).toContain("Led Zeppelin");
+    expect(result.operations[0].to).toContain("Stairway to Heaven");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseSourceFromFilename
+// ---------------------------------------------------------------------------
+describe("parseSourceFromFilename", () => {
+  it("extracts BluRay", () => {
+    expect(parseSourceFromFilename("Movie.2021.1080p.BluRay.x264")).toBe("Bluray");
+  });
+
+  it("extracts Blu-Ray variant", () => {
+    expect(parseSourceFromFilename("Movie.Blu-Ray.mkv")).toBe("Bluray");
+  });
+
+  it("extracts WEB-DL", () => {
+    expect(parseSourceFromFilename("Movie.2021.1080p.WEB-DL")).toBe("WEBDL");
+  });
+
+  it("extracts WEBDL without hyphen", () => {
+    expect(parseSourceFromFilename("Movie.WEBDL.1080p")).toBe("WEBDL");
+  });
+
+  it("extracts REMUX", () => {
+    expect(parseSourceFromFilename("Movie.2160p.REMUX.mkv")).toBe("Remux");
+  });
+
+  it("extracts HDTV", () => {
+    expect(parseSourceFromFilename("Show.S01E01.HDTV.mkv")).toBe("HDTV");
+  });
+
+  it("extracts WEBRip", () => {
+    expect(parseSourceFromFilename("Movie.WEBRip.1080p")).toBe("WEBRip");
+  });
+
+  it("extracts DVDRip", () => {
+    expect(parseSourceFromFilename("Movie.DVDRip.XviD")).toBe("DVDRip");
+  });
+
+  it("returns undefined when no source tag present", () => {
+    expect(parseSourceFromFilename("Movie.2021.mkv")).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseHdrFromFilename
+// ---------------------------------------------------------------------------
+describe("parseHdrFromFilename", () => {
+  it("extracts HDR", () => {
+    expect(parseHdrFromFilename("Movie.2160p.HDR.mkv")).toBe("HDR");
+  });
+
+  it("extracts HDR10", () => {
+    expect(parseHdrFromFilename("Movie.HDR10.BluRay")).toBe("HDR10");
+  });
+
+  it("extracts HDR10+", () => {
+    expect(parseHdrFromFilename("Movie.HDR10+.mkv")).toBe("HDR10+");
+  });
+
+  it("extracts DV (Dolby Vision shorthand)", () => {
+    expect(parseHdrFromFilename("Movie.DV.2160p")).toBe("DV");
+  });
+
+  it("extracts DoVi", () => {
+    expect(parseHdrFromFilename("Movie.DoVi.mkv")).toBe("DV");
+  });
+
+  it("returns undefined when no HDR tag present", () => {
+    expect(parseHdrFromFilename("Movie.1080p.BluRay")).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildVersionTag
+// ---------------------------------------------------------------------------
+describe("buildVersionTag", () => {
+  it("combines resolution and source", () => {
+    expect(buildVersionTag("Movie.1080p.BluRay.x264")).toBe("1080p Bluray");
+  });
+
+  it("combines resolution, source, and HDR", () => {
+    expect(buildVersionTag("Movie.2160p.BluRay.REMUX.HDR")).toBe("4K Bluray HDR");
+  });
+
+  it("returns resolution only when no source/HDR", () => {
+    expect(buildVersionTag("Movie.720p.mkv")).toBe("720p");
+  });
+
+  it("returns source only when no resolution", () => {
+    expect(buildVersionTag("Movie.BluRay.mkv")).toBe("Bluray");
+  });
+
+  it("returns HDR with resolution", () => {
+    expect(buildVersionTag("Movie.2160p.HDR10.mkv")).toBe("4K HDR10");
+  });
+
+  it("returns undefined for files with no quality tags", () => {
+    expect(buildVersionTag("regular_document.txt")).toBeUndefined();
+  });
+
+  it("handles DV + resolution combo", () => {
+    expect(buildVersionTag("Movie.2160p.DV.mkv")).toBe("4K DV");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Jellyfin Movie Multi-Version with enhanced version tags
+// ---------------------------------------------------------------------------
+describe("renameFolder – enhanced multi-version tags", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = createTmpDir();
+  });
+
+  afterEach(() => cleanupDir(tmpDir));
+
+  it("includes source tag in multi-version output", async () => {
+    writeFileSync(join(tmpDir, "Movie.2020.1080p.BluRay.mkv"), "");
+    const result = await renameFolder(tmpDir, jellyfinMovieVersionPattern, true);
+    expect(result.operations.length).toBe(1);
+    const name = result.operations[0].to.split("/").pop() ?? "";
+    expect(name).toContain("[1080p Bluray]");
+  });
+
+  it("includes HDR tag in multi-version output", async () => {
+    writeFileSync(join(tmpDir, "Movie.2020.2160p.HDR.mkv"), "");
+    const result = await renameFolder(tmpDir, jellyfinMovieVersionPattern, true);
+    const name = result.operations[0].to.split("/").pop() ?? "";
+    expect(name).toContain("[4K HDR]");
+  });
+
+  it("includes REMUX and HDR together", async () => {
+    writeFileSync(join(tmpDir, "Movie.2020.2160p.REMUX.HDR.mkv"), "");
+    const result = await renameFolder(tmpDir, jellyfinMovieVersionPattern, true);
+    const name = result.operations[0].to.split("/").pop() ?? "";
+    expect(name).toContain("[4K Remux HDR]");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseYoutubePattern
+// ---------------------------------------------------------------------------
+describe("parseYoutubePattern", () => {
+  it("extracts video ID from yt-dlp naming", () => {
+    const meta = parseYoutubePattern("My Cool Video [dQw4w9WgXcQ]");
+    expect(meta.videoId).toBe("dQw4w9WgXcQ");
+    expect(meta.title).toBe("My Cool Video");
+  });
+
+  it("extracts channel and title from Channel - Title format", () => {
+    const meta = parseYoutubePattern("Tech Channel - How to Code [abc123DEF-_]");
+    expect(meta.uploader).toBe("Tech Channel");
+    expect(meta.title).toBe("How to Code");
+    expect(meta.videoId).toBe("abc123DEF-_");
+  });
+
+  it("extracts date from YYYYMMDD prefix", () => {
+    const meta = parseYoutubePattern("20240115 My Video [dQw4w9WgXcQ]");
+    expect(meta.dateTaken).toBe("2024-01-15");
+    expect(meta.videoId).toBe("dQw4w9WgXcQ");
+  });
+
+  it("handles filename without video ID", () => {
+    const meta = parseYoutubePattern("Some Random Video");
+    expect(meta.videoId).toBeUndefined();
+    expect(meta.title).toBe("Some Random Video");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseAnimePattern
+// ---------------------------------------------------------------------------
+describe("parseAnimePattern", () => {
+  it("parses fansub format [Group] Title - 01", () => {
+    const meta = parseAnimePattern("[SubGroup] Naruto - 42");
+    expect(meta.title).toBe("Naruto");
+    expect(meta.absoluteEpisode).toBe(42);
+  });
+
+  it("parses SxxExx format", () => {
+    const meta = parseAnimePattern("Attack.on.Titan.S01E025.Episode.Title");
+    expect(meta.title).toBe("Attack on Titan");
+    expect(meta.season).toBe(1);
+    expect(meta.absoluteEpisode).toBe(25);
+  });
+
+  it("parses absolute numbering with episode title", () => {
+    const meta = parseAnimePattern("One Piece - 001 - Romance Dawn");
+    expect(meta.title).toBe("One Piece");
+    expect(meta.absoluteEpisode).toBe(1);
+    expect(meta.episodeTitle).toBe("Romance Dawn");
+  });
+
+  it("strips trailing quality tags", () => {
+    const meta = parseAnimePattern("[Fansub] Bleach - 42 [1080p]");
+    expect(meta.absoluteEpisode).toBe(42);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parsePodcastPattern
+// ---------------------------------------------------------------------------
+describe("parsePodcastPattern", () => {
+  it("parses Show - Date - Episode format", () => {
+    const meta = parsePodcastPattern("Tech Talk - 2024-03-10 - AI Revolution");
+    expect(meta.showName).toBe("Tech Talk");
+    expect(meta.dateTaken).toBe("2024-03-10");
+    expect(meta.episodeTitle).toBe("AI Revolution");
+  });
+
+  it("parses Show - Date format", () => {
+    const meta = parsePodcastPattern("My Podcast - 2024-01-01");
+    expect(meta.showName).toBe("My Podcast");
+    expect(meta.dateTaken).toBe("2024-01-01");
+  });
+
+  it("parses Date - Episode format", () => {
+    const meta = parsePodcastPattern("2024-06-15 - Great Interview");
+    expect(meta.dateTaken).toBe("2024-06-15");
+    expect(meta.episodeTitle).toBe("Great Interview");
+  });
+
+  it("parses Show - Episode format (no date)", () => {
+    const meta = parsePodcastPattern("Science Hour - The Universe");
+    expect(meta.showName).toBe("Science Hour");
+    expect(meta.episodeTitle).toBe("The Universe");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseComicPattern
+// ---------------------------------------------------------------------------
+describe("parseComicPattern", () => {
+  it("parses volume and chapter", () => {
+    const meta = parseComicPattern("One Piece Vol 01 Ch 001");
+    expect(meta.title).toBe("One Piece");
+    expect(meta.volume).toBe(1);
+    expect(meta.chapter).toBe(1);
+  });
+
+  it("parses issue number with #", () => {
+    const meta = parseComicPattern("Batman #042");
+    expect(meta.title).toBe("Batman");
+    expect(meta.chapter).toBe(42);
+  });
+
+  it("parses volume only", () => {
+    const meta = parseComicPattern("Spider-Man Volume 3");
+    expect(meta.title).toBe("Spider-Man");
+    expect(meta.volume).toBe(3);
+  });
+
+  it("parses Chapter keyword", () => {
+    const meta = parseComicPattern("Naruto Chapter 100");
+    expect(meta.chapter).toBe(100);
+  });
+
+  it("handles plain title with no volume or chapter", () => {
+    const meta = parseComicPattern("Watchmen");
+    expect(meta.title).toBe("Watchmen");
+    expect(meta.volume).toBeUndefined();
+    expect(meta.chapter).toBeUndefined();
+  });
+
+  it("parses lowercase vol and ch abbreviations", () => {
+    const meta = parseComicPattern("Berserk v12 c45");
+    expect(meta.volume).toBe(12);
+    expect(meta.chapter).toBe(45);
+  });
+
+  it("parses volume with dot separator", () => {
+    const meta = parseComicPattern("Title Vol.03 Ch.010");
+    expect(meta.volume).toBe(3);
+    expect(meta.chapter).toBe(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseYoutubePattern – edge cases
+// ---------------------------------------------------------------------------
+describe("parseYoutubePattern – edge cases", () => {
+  it("handles filename with both channel and date", () => {
+    const meta = parseYoutubePattern("Channel Name - 20230615 Video Title [abc123DEF-_]");
+    expect(meta.uploader).toBe("Channel Name");
+    expect(meta.videoId).toBe("abc123DEF-_");
+  });
+
+  it("handles title with special characters", () => {
+    const meta = parseYoutubePattern("What's the Deal? (Part 1) [dQw4w9WgXcQ]");
+    expect(meta.title).toBe("What's the Deal? (Part 1)");
+    expect(meta.videoId).toBe("dQw4w9WgXcQ");
+  });
+
+  it("handles filename with only video ID", () => {
+    const meta = parseYoutubePattern("[dQw4w9WgXcQ]");
+    expect(meta.videoId).toBe("dQw4w9WgXcQ");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parsePodcastPattern – edge cases
+// ---------------------------------------------------------------------------
+describe("parsePodcastPattern – edge cases", () => {
+  it("handles podcast show with multiple dashes in title", () => {
+    const meta = parsePodcastPattern("This American Life - 2024-06-15 - Summer Stories");
+    expect(meta.showName).toBe("This American Life");
+    expect(meta.dateTaken).toBe("2024-06-15");
+    expect(meta.episodeTitle).toBe("Summer Stories");
+  });
+
+  it("returns empty for a bare filename with no separators", () => {
+    const meta = parsePodcastPattern("episode42");
+    expect(meta.showName).toBeUndefined();
+    expect(meta.dateTaken).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseAnimePattern – edge cases
+// ---------------------------------------------------------------------------
+describe("parseAnimePattern – edge cases", () => {
+  it("parses anime with multiple fansub-style brackets", () => {
+    const meta = parseAnimePattern("[SubGroup] My Hero Academia - 05 [720p]");
+    expect(meta.title).toBe("My Hero Academia");
+    expect(meta.absoluteEpisode).toBe(5);
+  });
+
+  it("handles anime title with dots", () => {
+    const meta = parseAnimePattern("Steins.Gate.S01E001.Prologue");
+    expect(meta.title).toBe("Steins Gate");
+    expect(meta.season).toBe(1);
+    expect(meta.absoluteEpisode).toBe(1);
+    expect(meta.episodeTitle).toBe("Prologue");
+  });
+
+  it("handles episode number without leading zeros", () => {
+    const meta = parseAnimePattern("[Subs] Dragon Ball - 42");
+    expect(meta.absoluteEpisode).toBe(42);
   });
 });

@@ -5,15 +5,48 @@
  * Supports dry-run mode (preview only) and returns all operations for undo.
  */
 
-import { readdirSync, statSync, existsSync } from "fs";
-import { rename, mkdir } from "fs/promises";
-import { join, extname, basename } from "path";
+import { rename, mkdir, readdir, stat } from "fs/promises";
+import { join, extname, basename, dirname } from "path";
 import type { NamingPattern, FileMetadata } from "./patterns.js";
 import { MediaType } from "./patterns.js";
 import { findAndParseNfo } from "./nfo-parser.js";
 import { logOperation } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
-import { validateFolderPath, RELEASE_TAG_RE } from "./config.js";
+import { validateFolderPath, RELEASE_TAG_RE, ROM_TAG_RE, ROM_REGION_RE, PLATFORM_MAP, RESOLUTION_RE, RESOLUTION_LABELS, SOURCE_TAG_RE, SOURCE_LABELS, HDR_TAG_RE, HDR_LABELS, YOUTUBE_ID_RE, ABSOLUTE_EPISODE_RE, COMIC_VOLUME_RE, COMIC_CHAPTER_RE } from "./config.js";
+import { enrichMetadata, type LookupConfig } from "./metadata-lookup.js";
+
+/**
+ * Extract title and year from a folder name.
+ * Handles patterns like "Title (Year)", "Title - Year", "Season NN".
+ */
+function folderMeta(folderName: string): { title?: string; year?: number; season?: number } {
+  const result: { title?: string; year?: number; season?: number } = {};
+
+  const seasonMatch = /^[Ss]eason\s*(\d{1,3})$/i.exec(folderName);
+  if (seasonMatch) {
+    result.season = parseInt(seasonMatch[1], 10);
+    return result;
+  }
+
+  const titleYear = /^(.+?)\s*[\(\[]?((?:19|20)\d{2})[\)\]]?\s*$/.exec(folderName);
+  if (titleYear) {
+    result.title = titleYear[1].replace(/[_.-]+$/, "").trim();
+    result.year = parseInt(titleYear[2], 10);
+    return result;
+  }
+
+  const titleDash = /^(.+?)\s*-\s*((?:19|20)\d{2})\s*$/.exec(folderName);
+  if (titleDash) {
+    result.title = titleDash[1].trim();
+    result.year = parseInt(titleDash[2], 10);
+    return result;
+  }
+
+  if (folderName.trim()) {
+    result.title = folderName.trim();
+  }
+  return result;
+}
 
 export interface RenameOperation {
   /** Original full path */
@@ -131,14 +164,280 @@ export function parseYearFromFilename(baseName: string): number | undefined {
 }
 
 /**
+ * Parse video resolution from a filename.
+ * Handles tokens like "1080p", "2160p", "4K", "720p", "480p", "576p".
+ * Returns a normalised label (e.g. "4K" for both "2160p" and "4K").
+ */
+export function parseResolutionFromFilename(baseName: string): string | undefined {
+  const m = RESOLUTION_RE.exec(baseName);
+  if (!m) return undefined;
+  const raw = m[1];
+  return RESOLUTION_LABELS[raw] ?? RESOLUTION_LABELS[raw.toLowerCase()] ?? raw;
+}
+
+/**
+ * Parse the video source tag from a filename (e.g. "BluRay", "WEB-DL", "REMUX").
+ * Returns a normalised label.
+ */
+export function parseSourceFromFilename(baseName: string): string | undefined {
+  const m = SOURCE_TAG_RE.exec(baseName);
+  if (!m) return undefined;
+  const raw = m[1].toLowerCase();
+  return SOURCE_LABELS[raw] ?? m[1];
+}
+
+/**
+ * Parse HDR/dynamic-range tag from a filename (e.g. "HDR", "HDR10+", "DV").
+ * Returns a normalised label.
+ */
+export function parseHdrFromFilename(baseName: string): string | undefined {
+  const m = HDR_TAG_RE.exec(baseName);
+  if (!m) return undefined;
+  const raw = m[1].toLowerCase();
+  return HDR_LABELS[raw] ?? m[1];
+}
+
+/**
+ * Build a full Jellyfin-style version tag from filename components.
+ * Combines resolution, source, and HDR info into a single bracket tag.
+ * E.g. "1080p Bluray", "4K HDR", "2160p Bluray Remux DV"
+ */
+export function buildVersionTag(baseName: string): string | undefined {
+  const parts: string[] = [];
+  const res = parseResolutionFromFilename(baseName);
+  if (res) parts.push(res);
+  const src = parseSourceFromFilename(baseName);
+  if (src) parts.push(src);
+  const hdr = parseHdrFromFilename(baseName);
+  if (hdr) parts.push(hdr);
+  return parts.length > 0 ? parts.join(" ") : undefined;
+}
+
+/**
+ * Extract a clean movie title from a filename by stripping year, resolution, and release tags.
+ * E.g. "Inception.2010.1080p.BluRay.x264" → "Inception"
+ */
+export function parseMovieTitle(baseName: string): string {
+  return baseName
+    .replace(/[._]/g, " ")
+    .replace(/\b(19|20)\d{2}\b.*$/, "")
+    .replace(RELEASE_TAG_RE, "")
+    .trim() || baseName;
+}
+
+/**
+ * Parse ROM metadata from a filename.
+ * Handles formats like:
+ *   Super Mario Bros. (USA) [!].nes
+ *   Legend of Zelda, The - A Link to the Past (USA) [!].sfc
+ *   Sonic the Hedgehog (Japan, USA).gen
+ *
+ * Extracts game title, region, and maps extension to platform.
+ */
+export function parseRomPattern(baseName: string, ext: string): Partial<FileMetadata> {
+  const meta: Partial<FileMetadata> = {};
+
+  // Extract region from the first parenthesised tag
+  const regionMatch = ROM_REGION_RE.exec(baseName);
+  if (regionMatch) {
+    meta.region = regionMatch[1].trim();
+  }
+
+  // Strip scene tags [!], [b], [h1], etc. and parenthesised tags for a clean title
+  const title = baseName
+    .replace(ROM_TAG_RE, "")
+    .replace(/\([^)]*\)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (title) {
+    meta.title = title;
+  }
+
+  // Map extension to platform name
+  meta.platform = PLATFORM_MAP[ext.toLowerCase()];
+
+  return meta;
+}
+
+/**
+ * Parse YouTube / yt-dlp download metadata from a filename.
+ * Handles formats like:
+ *   "Video Title [dQw4w9WgXcQ].mp4"
+ *   "Channel - Video Title [dQw4w9WgXcQ].mp4"
+ *   "20230615 Video Title [dQw4w9WgXcQ].webm"
+ */
+export function parseYoutubePattern(baseName: string): Partial<FileMetadata> {
+  const meta: Partial<FileMetadata> = {};
+
+  // Extract video ID from [ID] at end
+  const idMatch = YOUTUBE_ID_RE.exec(baseName);
+  if (idMatch) {
+    meta.videoId = idMatch[1];
+  }
+
+  // Remove the video ID bracket from the title
+  let cleaned = baseName.replace(YOUTUBE_ID_RE, "").trim();
+
+  // Try to extract uploader/channel from "Channel - Title" format
+  const channelMatch = /^(.+?)\s*-\s+(.+)$/.exec(cleaned);
+  if (channelMatch) {
+    meta.uploader = channelMatch[1].trim();
+    meta.title = channelMatch[2].trim();
+  } else {
+    meta.title = cleaned;
+  }
+
+  // Try to extract date from YYYYMMDD prefix
+  const datePrefix = /^(\d{4})(\d{2})(\d{2})\s+/.exec(cleaned);
+  if (datePrefix) {
+    meta.dateTaken = `${datePrefix[1]}-${datePrefix[2]}-${datePrefix[3]}`;
+    meta.title = cleaned.replace(/^\d{8}\s+/, "").trim();
+  }
+
+  return meta;
+}
+
+/**
+ * Parse anime metadata from a filename.
+ * Handles formats like:
+ *   "[SubGroup] Anime Title - 01 [1080p].mkv"
+ *   "Anime Title - 001 - Episode Title.mkv"
+ *   "Anime.Title.S01E001.Episode.Title.mkv"
+ */
+export function parseAnimePattern(baseName: string): Partial<FileMetadata> {
+  const meta: Partial<FileMetadata> = {};
+
+  // Strip fansub group tags: [SubGroup]
+  let cleaned = baseName.replace(/^\[([^\]]+)\]\s*/, "");
+
+  // Strip trailing quality tags: [1080p], [720p], etc.
+  cleaned = cleaned.replace(/\s*\[\d+p\]$/, "").trim();
+
+  // Try SxxExx pattern first
+  const seMatch = /^(.*?)[.\s_-]+[Ss](\d{1,2})[Ee](\d{1,4})(?:[.\s_-]+(.+))?$/.exec(cleaned);
+  if (seMatch) {
+    meta.title = seMatch[1].replace(/[._]/g, " ").trim();
+    meta.season = parseInt(seMatch[2], 10);
+    meta.absoluteEpisode = parseInt(seMatch[3], 10);
+    meta.episode = meta.absoluteEpisode;
+    if (seMatch[4]) {
+      meta.episodeTitle = seMatch[4].replace(/[._]/g, " ").replace(RELEASE_TAG_RE, "").trim();
+    }
+    return meta;
+  }
+
+  // Absolute numbering: "Title - 001" or "Title - 001 - Episode Title"
+  const absMatch = ABSOLUTE_EPISODE_RE.exec(cleaned);
+  if (absMatch) {
+    meta.absoluteEpisode = parseInt(absMatch[1], 10);
+    meta.episode = meta.absoluteEpisode;
+    // Extract title (everything before the episode number pattern)
+    const titlePart = cleaned.slice(0, absMatch.index).replace(/[.\s_-]+$/, "").replace(/[._]/g, " ").trim();
+    if (titlePart) meta.title = titlePart;
+    // Extract episode title (everything after the episode number)
+    const afterEp = cleaned.slice(absMatch.index + absMatch[0].length).replace(/^[.\s_-]+/, "").replace(/[._]/g, " ").replace(RELEASE_TAG_RE, "").trim();
+    if (afterEp) meta.episodeTitle = afterEp;
+  }
+
+  return meta;
+}
+
+/**
+ * Parse podcast metadata from a filename.
+ * Handles formats like:
+ *   "Show Name - 2024-01-15 - Episode Title.mp3"
+ *   "Show Name - Episode Title.mp3"
+ *   "2024-01-15 - Episode Title.mp3"
+ */
+export function parsePodcastPattern(baseName: string): Partial<FileMetadata> {
+  const meta: Partial<FileMetadata> = {};
+
+  // Try: "Show - YYYY-MM-DD - Episode" or "Show - YYYY-MM-DD"
+  const fullMatch = /^(.+?)\s*-\s*(\d{4}-\d{2}-\d{2})\s*-\s*(.+)$/.exec(baseName);
+  if (fullMatch) {
+    meta.showName = fullMatch[1].trim();
+    meta.dateTaken = fullMatch[2];
+    meta.episodeTitle = fullMatch[3].trim();
+    return meta;
+  }
+
+  // Try: "Show - YYYY-MM-DD"
+  const showDateMatch = /^(.+?)\s*-\s*(\d{4}-\d{2}-\d{2})$/.exec(baseName);
+  if (showDateMatch) {
+    meta.showName = showDateMatch[1].trim();
+    meta.dateTaken = showDateMatch[2];
+    return meta;
+  }
+
+  // Try: "YYYY-MM-DD - Episode Title"
+  const dateEpMatch = /^(\d{4}-\d{2}-\d{2})\s*-\s*(.+)$/.exec(baseName);
+  if (dateEpMatch) {
+    meta.dateTaken = dateEpMatch[1];
+    meta.episodeTitle = dateEpMatch[2].trim();
+    return meta;
+  }
+
+  // Try: "Show - Episode Title"
+  const showEpMatch = /^(.+?)\s*-\s*(.+)$/.exec(baseName);
+  if (showEpMatch) {
+    meta.showName = showEpMatch[1].trim();
+    meta.episodeTitle = showEpMatch[2].trim();
+    return meta;
+  }
+
+  return meta;
+}
+
+/**
+ * Parse comic/manga metadata from a filename.
+ * Handles formats like:
+ *   "One Piece Vol 01 Ch 001.cbz"
+ *   "Batman #042.cbz"
+ *   "Spider-Man v3 #15.cbz"
+ *   "Naruto Chapter 100.cbz"
+ */
+export function parseComicPattern(baseName: string): Partial<FileMetadata> {
+  const meta: Partial<FileMetadata> = {};
+
+  // Extract volume
+  const volMatch = COMIC_VOLUME_RE.exec(baseName);
+  if (volMatch) {
+    meta.volume = parseInt(volMatch[1], 10);
+  }
+
+  // Extract chapter
+  const chMatch = COMIC_CHAPTER_RE.exec(baseName);
+  if (chMatch) {
+    meta.chapter = parseInt(chMatch[1], 10);
+  }
+
+  // Extract title: everything before the first vol/chapter/issue marker
+  let title = baseName
+    .replace(COMIC_VOLUME_RE, "")
+    .replace(COMIC_CHAPTER_RE, "")
+    .replace(/#\d+/, "")
+    .replace(/[._]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (title) meta.title = title;
+
+  return meta;
+}
+
+/**
  * Build FileMetadata from a filename and any NFO data.
  * NFO data takes precedence over filename parsing.
  * Selects the appropriate parser based on the target pattern's media type.
+ * When a LookupConfig is provided and enabled, missing metadata is enriched
+ * from public APIs (TMDB, MusicBrainz, Open Library) after local parsing.
  */
 async function buildMetadata(
   filePath: string,
   pattern: NamingPattern,
-  index: number
+  index: number,
+  lookupConfig?: LookupConfig
 ): Promise<FileMetadata> {
   const ext = extname(filePath).toLowerCase();
   const baseName = basename(filePath, ext);
@@ -148,32 +447,102 @@ async function buildMetadata(
   // Select parser based on the pattern's media type
   const isMusicPattern = pattern.mediaType === MediaType.MUSIC;
   const isTvPattern = pattern.mediaType === MediaType.JELLYFIN_TV;
+  const isRomPattern = pattern.mediaType === MediaType.EMULATION_ROMS;
+  const isMoviePattern = pattern.mediaType === MediaType.JELLYFIN_MOVIE
+    || pattern.mediaType === MediaType.JELLYFIN_MOVIE_VERSION;
+  const isAnimePattern = pattern.mediaType === MediaType.ANIME;
+  const isYoutubePattern = pattern.mediaType === MediaType.YOUTUBE_ARCHIVE;
+  const isPodcastPattern = pattern.mediaType === MediaType.PODCAST_ARCHIVE;
+  const isComicPattern = pattern.mediaType === MediaType.COMICS;
 
   const fromTv = isTvPattern ? parseTvPattern(baseName) : {};
   const fromMusic = isMusicPattern ? parseMusicPattern(baseName) : {};
+  const fromRom = isRomPattern ? parseRomPattern(baseName, ext) : {};
+  const fromAnime = isAnimePattern ? parseAnimePattern(baseName) : {};
+  const fromYoutube = isYoutubePattern ? parseYoutubePattern(baseName) : {};
+  const fromPodcast = isPodcastPattern ? parsePodcastPattern(baseName) : {};
+  const fromComic = isComicPattern ? parseComicPattern(baseName) : {};
 
   // For movie/photo/book/doc patterns, try TV parsing only for
-  // season/episode extraction (useful for metadata) when not music
-  const fromTvFallback = !isMusicPattern && !isTvPattern ? parseTvPattern(baseName) : {};
+  // season/episode extraction (useful for metadata) when not music or ROM
+  const fromTvFallback = !isMusicPattern && !isTvPattern && !isRomPattern && !isAnimePattern && !isYoutubePattern && !isPodcastPattern && !isComicPattern ? parseTvPattern(baseName) : {};
+
+  // For movie patterns, extract a clean title from the filename
+  const movieTitle = isMoviePattern ? parseMovieTitle(baseName) : undefined;
 
   // Merge: NFO takes precedence, then pattern-appropriate parser
   const merged: FileMetadata = {
     baseName,
     ext,
     originalPath: filePath,
-    title: nfoMeta.title ?? fromTv.title ?? fromTvFallback.title ?? baseName,
-    season: nfoMeta.season ?? fromTv.season ?? fromTvFallback.season,
-    episode: nfoMeta.episode ?? fromTv.episode ?? fromTvFallback.episode,
-    episodeTitle: nfoMeta.episodeTitle ?? fromTv.episodeTitle ?? fromTvFallback.episodeTitle,
+    title: nfoMeta.title ?? fromTv.title ?? fromAnime.title ?? fromComic.title ?? fromYoutube.title ?? fromPodcast.showName ?? fromRom.title ?? movieTitle ?? fromTvFallback.title ?? baseName,
+    season: nfoMeta.season ?? fromTv.season ?? fromAnime.season ?? fromTvFallback.season,
+    episode: nfoMeta.episode ?? fromTv.episode ?? fromAnime.episode ?? fromTvFallback.episode,
+    episodeTitle: nfoMeta.episodeTitle ?? fromTv.episodeTitle ?? fromAnime.episodeTitle ?? fromPodcast.episodeTitle ?? fromTvFallback.episodeTitle,
     year: nfoMeta.year ?? parseYearFromFilename(baseName),
     artist: nfoMeta.artist ?? fromMusic.artist,
     album: nfoMeta.album,
     trackNumber: nfoMeta.trackNumber ?? fromMusic.trackNumber,
     songTitle: fromMusic.songTitle ?? baseName,
-    index
+    index,
+    platform: fromRom.platform,
+    region: fromRom.region,
+    resolution: parseResolutionFromFilename(baseName),
+    source: parseSourceFromFilename(baseName),
+    hdr: parseHdrFromFilename(baseName),
+    versionTag: buildVersionTag(baseName),
+    absoluteEpisode: fromAnime.absoluteEpisode,
+    uploader: fromYoutube.uploader,
+    videoId: fromYoutube.videoId,
+    showName: fromPodcast.showName,
+    volume: fromComic.volume,
+    chapter: fromComic.chapter,
+    dateTaken: fromYoutube.dateTaken ?? fromPodcast.dateTaken
   };
 
+  // Enrich from parent folder context when parsers couldn't extract metadata.
+  // Folder names are a reliable fallback since users typically organise files
+  // into named directories (e.g. "Show Name/", "Artist Name/", "Channel/").
+  const folderCtx = folderMeta(basename(dirname(filePath)));
+
+  if (isPodcastPattern && !merged.showName && folderCtx.title) {
+    merged.showName = folderCtx.title;
+  }
+  if (isYoutubePattern && !merged.uploader && folderCtx.title) {
+    merged.uploader = folderCtx.title;
+  }
+  if (isComicPattern && merged.title === baseName && folderCtx.title) {
+    merged.title = folderCtx.title;
+  }
+  if ((isTvPattern || isAnimePattern) && merged.title === baseName && folderCtx.title) {
+    merged.title = folderCtx.title;
+  }
+  if (isMoviePattern && !merged.year && folderCtx.year) {
+    merged.year = folderCtx.year;
+  }
+  if (isMusicPattern && !merged.artist && folderCtx.title) {
+    merged.artist = folderCtx.title;
+  }
+
+  // Enrich from internet lookups when local parsing left gaps.
+  // Only fires when config is enabled and critical fields are missing.
+  if (lookupConfig?.enabled) {
+    return enrichMetadata(merged, pattern.mediaType, lookupConfig);
+  }
+
   return merged;
+}
+
+/**
+ * Check if a path exists on the filesystem.
+ */
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await stat(p);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -181,32 +550,35 @@ async function buildMetadata(
  * Checks both the in-memory tracking set and the actual filesystem to
  * avoid race conditions with external modifications.
  */
-function deconflict(proposedPath: string, existingFiles: Set<string>): string {
-  if (!existingFiles.has(proposedPath) && !existsSync(proposedPath)) return proposedPath;
+async function deconflict(proposedPath: string, existingFiles: Set<string>): Promise<string> {
+  if (!existingFiles.has(proposedPath) && !(await pathExists(proposedPath))) return proposedPath;
 
   const ext = extname(proposedPath);
   const base = proposedPath.slice(0, -ext.length);
   let counter = 2;
   let candidate: string;
-  do {
+  for (;;) {
     candidate = `${base} (${counter})${ext}`;
+    if (!existingFiles.has(candidate) && !(await pathExists(candidate))) break;
     counter++;
-  } while (existingFiles.has(candidate) || existsSync(candidate));
+  }
   return candidate;
 }
 
 /**
  * Apply a naming pattern to all matching files in a folder.
  *
- * @param folderPath - The directory to operate on.
- * @param pattern    - The naming pattern to apply.
- * @param dryRun     - If true, no files are actually renamed.
- * @returns          - Summary of operations performed.
+ * @param folderPath    - The directory to operate on.
+ * @param pattern       - The naming pattern to apply.
+ * @param dryRun        - If true, no files are actually renamed.
+ * @param lookupConfig  - Optional internet lookup config for metadata enrichment.
+ * @returns             - Summary of operations performed.
  */
 export async function renameFolder(
   folderPath: string,
   pattern: NamingPattern,
-  dryRun = false
+  dryRun = false,
+  lookupConfig?: LookupConfig
 ): Promise<RenameResult> {
   const result: RenameResult = {
     operations: [],
@@ -223,7 +595,7 @@ export async function renameFolder(
 
   let entries: string[];
   try {
-    entries = readdirSync(folderPath);
+    entries = await readdir(folderPath);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     result.errors["[folder]"] = `Could not read folder: ${msg}`;
@@ -231,16 +603,18 @@ export async function renameFolder(
   }
 
   // Filter to files matching the pattern's extensions
-  const targetFiles = entries.filter(name => {
+  const targetFiles: string[] = [];
+  for (const name of entries) {
     const ext = extname(name).toLowerCase();
-    let stat;
     try {
-      stat = statSync(join(folderPath, name));
+      const fileStat = await stat(join(folderPath, name));
+      if (fileStat.isFile() && pattern.extensions.includes(ext)) {
+        targetFiles.push(name);
+      }
     } catch {
-      return false;
+      // skip unreadable entries
     }
-    return stat.isFile() && pattern.extensions.includes(ext);
-  });
+  }
 
   // Build a set of all file paths currently in the folder for deconfliction
   const existingPaths = new Set(
@@ -255,7 +629,7 @@ export async function renameFolder(
 
     let meta: FileMetadata;
     try {
-      meta = await buildMetadata(fromPath, pattern, i + 1);
+      meta = await buildMetadata(fromPath, pattern, i + 1, lookupConfig);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       result.errors[name] = `Metadata error: ${msg}`;
@@ -264,7 +638,7 @@ export async function renameFolder(
 
     const newName = pattern.format(meta);
     let toPath = join(folderPath, newName);
-    toPath = deconflict(toPath, existingPaths);
+    toPath = await deconflict(toPath, existingPaths);
 
     const op: RenameOperation = {
       from: fromPath,
@@ -307,18 +681,20 @@ export async function renameFolder(
  * Apply a naming pattern with folder structuring (creates subfolders and moves files).
  * Used for Jellyfin TV and Music patterns.
  *
- * @param libraryRoot - Root of the media library.
- * @param pattern     - Pattern with a folderPath() function.
- * @param dryRun      - If true, no files are actually moved.
+ * @param libraryRoot   - Root of the media library.
+ * @param pattern       - Pattern with a folderPath() function.
+ * @param dryRun        - If true, no files are actually moved.
+ * @param lookupConfig  - Optional internet lookup config for metadata enrichment.
  */
 export async function organizeWithFolderStructure(
   libraryRoot: string,
   pattern: NamingPattern,
-  dryRun = false
+  dryRun = false,
+  lookupConfig?: LookupConfig
 ): Promise<RenameResult> {
   if (!pattern.folderPath) {
     // Fall back to flat rename
-    return renameFolder(libraryRoot, pattern, dryRun);
+    return renameFolder(libraryRoot, pattern, dryRun, lookupConfig);
   }
 
   const result: RenameResult = {
@@ -330,23 +706,25 @@ export async function organizeWithFolderStructure(
 
   let entries: string[];
   try {
-    entries = readdirSync(libraryRoot);
+    entries = await readdir(libraryRoot);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     result.errors["[folder]"] = `Could not read library root: ${msg}`;
     return result;
   }
 
-  const targetFiles = entries.filter(name => {
+  const targetFiles: string[] = [];
+  for (const name of entries) {
     const ext = extname(name).toLowerCase();
-    let stat;
     try {
-      stat = statSync(join(libraryRoot, name));
+      const fileStat = await stat(join(libraryRoot, name));
+      if (fileStat.isFile() && pattern.extensions.includes(ext)) {
+        targetFiles.push(name);
+      }
     } catch {
-      return false;
+      // skip unreadable entries
     }
-    return stat.isFile() && pattern.extensions.includes(ext);
-  });
+  }
 
   const undoOps: FileOperation[] = [];
   const createdDirs = new Set<string>();
@@ -357,7 +735,7 @@ export async function organizeWithFolderStructure(
 
     let meta: FileMetadata;
     try {
-      meta = await buildMetadata(fromPath, pattern, i + 1);
+      meta = await buildMetadata(fromPath, pattern, i + 1, lookupConfig);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       result.errors[name] = `Metadata error: ${msg}`;
@@ -379,7 +757,7 @@ export async function organizeWithFolderStructure(
 
     if (!dryRun) {
       try {
-        const dirExisted = existsSync(targetDir);
+        const dirExisted = await pathExists(targetDir);
         await mkdir(targetDir, { recursive: true });
         if (!dirExisted && !createdDirs.has(targetDir)) {
           undoOps.push({ type: "mkdir", from: "", to: targetDir });

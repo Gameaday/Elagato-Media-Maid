@@ -292,3 +292,60 @@ button.secondary:hover {
   background: linear-gradient(135deg, #ffd700, #f0b400);
   color: #1a1a1a;
 }
+
+/* ── Collapsible sections ──────────────────────────────────────── */
+
+.sdpi-collapse {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.sdpi-collapse-header {
+  background: var(--bg-input);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  list-style: none;
+  padding: 8px 10px;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.sdpi-collapse-header::before {
+  content: "▸ ";
+  font-size: 11px;
+}
+
+.sdpi-collapse[open] > .sdpi-collapse-header::before {
+  content: "▾ ";
+}
+
+.sdpi-collapse-header:hover {
+  background: var(--bg-hover);
+}
+
+.sdpi-collapse-body {
+  padding: 10px;
+}
+
+/* ── Controls hint (bottom of PI) ──────────────────────────────── */
+
+.sdpi-controls-hint {
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* ── Links ─────────────────────────────────────────────────────── */
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}

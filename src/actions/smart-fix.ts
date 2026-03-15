@@ -163,7 +163,7 @@ export class SmartFixAction extends SingletonAction<SmartFixSettings> {
         });
       }
 
-      const detection = detectMediaType(settings.folderPath);
+      const detection = await detectMediaType(settings.folderPath);
       const pattern = getPattern(detection.mediaType);
 
       if (actionObj.isDial()) {
@@ -207,7 +207,7 @@ export class SmartFixAction extends SingletonAction<SmartFixSettings> {
         });
       }
 
-      const detection = detectMediaType(settings.folderPath);
+      const detection = await detectMediaType(settings.folderPath);
       streamDeck.logger.info(
         `SmartFix detected: ${detection.mediaType} (confidence ${(detection.confidence * 100).toFixed(0)}%) – ${detection.reason}`
       );

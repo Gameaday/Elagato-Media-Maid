@@ -26,15 +26,15 @@ afterEach(() => {
 });
 
 describe("calculateLibraryStats", () => {
-  it("returns zero counts for an empty directory", () => {
-    const stats = calculateLibraryStats(TEST_ROOT);
+  it("returns zero counts for an empty directory", async () => {
+    const stats = await calculateLibraryStats(TEST_ROOT);
     expect(stats.totalFiles).toBe(0);
     expect(stats.totalSizeBytes).toBe(0);
     expect(stats.totalSizeFormatted).toBe("0 B");
     expect(stats.displayStats.length).toBeGreaterThan(0);
   });
 
-  it("counts files by category", () => {
+  it("counts files by category", async () => {
     createTestFiles({
       "video1.mkv": "x".repeat(100),
       "video2.mp4": "x".repeat(200),
@@ -43,7 +43,7 @@ describe("calculateLibraryStats", () => {
       "readme.txt": "hello"
     });
 
-    const stats = calculateLibraryStats(TEST_ROOT);
+    const stats = await calculateLibraryStats(TEST_ROOT);
     expect(stats.totalFiles).toBe(5);
     expect(stats.categoryCounts["Videos"]).toBe(2);
     expect(stats.categoryCounts["Images"]).toBe(1);
@@ -51,24 +51,24 @@ describe("calculateLibraryStats", () => {
     expect(stats.categoryCounts["Documents"]).toBe(1);
   });
 
-  it("counts total size correctly", () => {
+  it("counts total size correctly", async () => {
     createTestFiles({
       "file1.mkv": "a".repeat(1000),
       "file2.mp4": "b".repeat(2000)
     });
 
-    const stats = calculateLibraryStats(TEST_ROOT);
+    const stats = await calculateLibraryStats(TEST_ROOT);
     expect(stats.totalSizeBytes).toBe(3000);
     expect(stats.totalSizeFormatted).toContain("KB");
   });
 
-  it("includes displayStats for touchscreen cycling", () => {
+  it("includes displayStats for touchscreen cycling", async () => {
     createTestFiles({
       "movie.mkv": "x",
       "photo.jpg": "y"
     });
 
-    const stats = calculateLibraryStats(TEST_ROOT);
+    const stats = await calculateLibraryStats(TEST_ROOT);
     const labels = stats.displayStats.map(s => s.label);
     expect(labels).toContain("Total Files");
     expect(labels).toContain("Total Size");
@@ -76,26 +76,26 @@ describe("calculateLibraryStats", () => {
     expect(labels).toContain("Confidence");
   });
 
-  it("recursively scans subdirectories", () => {
+  it("recursively scans subdirectories", async () => {
     createTestFiles({
       "level1/file1.mkv": "x",
       "level1/level2/file2.mp4": "y",
       "level1/level2/level3/file3.avi": "z"
     });
 
-    const stats = calculateLibraryStats(TEST_ROOT);
+    const stats = await calculateLibraryStats(TEST_ROOT);
     expect(stats.totalFiles).toBe(3);
     expect(stats.categoryCounts["Videos"]).toBe(3);
   });
 
-  it("detects media type and confidence", () => {
+  it("detects media type and confidence", async () => {
     createTestFiles({
       "show.S01E01.mkv": "x",
       "show.S01E02.mkv": "x",
       "show.S01E03.mkv": "x"
     });
 
-    const stats = calculateLibraryStats(TEST_ROOT);
+    const stats = await calculateLibraryStats(TEST_ROOT);
     expect(stats.detectedType).toBeDefined();
     expect(stats.confidence).toBeGreaterThanOrEqual(0);
     expect(stats.confidence).toBeLessThanOrEqual(1);

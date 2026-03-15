@@ -9,6 +9,15 @@
 <body>
   <div class="sdpi-wrapper">
 
+    <details class="sdpi-collapse" open>
+      <summary class="sdpi-collapse-header">Getting Started</summary>
+      <div class="sdpi-collapse-body">
+        <div class="sdpi-info">
+          <strong>Easiest way to begin!</strong> Point Smart Fix at any folder and press — it auto-detects your media type (TV, movies, music, ROMs, etc.) and renames everything in one tap.
+        </div>
+      </div>
+    </details>
+
     <div class="sdpi-item">
       <label class="sdpi-item-label" for="folderPath">Target Folder</label>
       <input type="text" id="folderPath" placeholder="/path/to/your/downloads">
@@ -19,7 +28,7 @@
       <label class="sdpi-item-label">Minimum Confidence</label>
       <input type="range" id="minConfidence" min="0" max="100" value="40" step="5">
       <div class="range-value" id="confLabel">40%</div>
-      <div class="sdpi-info">Only apply changes if the detected type confidence meets this threshold.</div>
+      <div class="sdpi-info">Only apply changes if the detected type confidence meets this threshold. Lower = more aggressive, higher = more conservative.</div>
     </div>
 
     <div class="sdpi-item">
@@ -27,83 +36,55 @@
         <input type="checkbox" id="createFolderStructure">
         Create folder structure
       </label>
+      <div class="sdpi-info">Also moves files into organised subfolders (e.g., Season 01, Artist/Album).</div>
     </div>
 
     <hr class="sdpi-divider">
 
-    <div class="sdpi-info">
-      <strong>Short press</strong> – auto-detect and rename<br>
-      <strong>Long press (&gt;0.5 s)</strong> – dry run (preview in log)<br>
-      <strong>Dial rotate</strong> – adjust confidence threshold
+    <div class="sdpi-info sdpi-controls-hint">
+      <strong>▶ Press</strong> auto-detect &amp; rename &nbsp;·&nbsp; <strong>▶ Hold</strong> dry run<br>
+      <strong>↻ Dial</strong> adjust confidence
     </div>
 
   </div>
 
+  <script src="sdpi-common.js"></script>
   <script>
-    const folderPathEl = document.getElementById("folderPath");
-    const minConfEl    = document.getElementById("minConfidence");
-    const confLabelEl  = document.getElementById("confLabel");
-    const createFSEl   = document.getElementById("createFolderStructure");
-    const pathStatusEl = document.getElementById("pathStatus");
+    var folderPathEl = document.getElementById("folderPath");
+    var minConfEl    = document.getElementById("minConfidence");
+    var confLabelEl  = document.getElementById("confLabel");
+    var createFSEl   = document.getElementById("createFolderStructure");
+    var pathStatusEl = document.getElementById("pathStatus");
 
-    minConfEl.addEventListener("input", () => {
+    minConfEl.addEventListener("input", function () {
       confLabelEl.textContent = minConfEl.value + "%";
     });
 
-    function validatePath() {
-      const path = folderPathEl.value.trim();
-      if (!path) {
-        pathStatusEl.className = "";
-        pathStatusEl.textContent = "";
-      } else if (!path.startsWith("/") && !path.match(/^[A-Za-z]:\\/)) {
-        pathStatusEl.className = "sdpi-warning";
-        pathStatusEl.textContent = "Path should be absolute.";
-      } else {
-        pathStatusEl.className = "sdpi-success";
-        pathStatusEl.textContent = "Ready.";
-      }
+    function gatherSettings() {
+      return {
+        folderPath:            folderPathEl.value.trim(),
+        minConfidence:         parseInt(minConfEl.value, 10) / 100,
+        createFolderStructure: createFSEl.checked
+      };
     }
 
-    function loadSettings(s) {
+    function onSettingsLoaded(s) {
       if (s.folderPath !== undefined) folderPathEl.value = s.folderPath;
       if (s.minConfidence !== undefined) {
         minConfEl.value = Math.round(s.minConfidence * 100);
         confLabelEl.textContent = minConfEl.value + "%";
       }
       if (s.createFolderStructure !== undefined) createFSEl.checked = s.createFolderStructure;
-      validatePath();
+      validatePath(folderPathEl, pathStatusEl);
     }
 
-    function saveSettings() {
-      window.sendToPlugin && window.sendToPlugin({
-        event: "setSettings",
-        payload: {
-          folderPath:            folderPathEl.value.trim(),
-          minConfidence:         parseInt(minConfEl.value, 10) / 100,
-          createFolderStructure: createFSEl.checked
-        }
+    function onPiConnected() {
+      folderPathEl.addEventListener("input", function () {
+        validatePath(folderPathEl, pathStatusEl);
+        saveSettings(gatherSettings());
       });
-    }
-
-    function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
-      const websocket = new WebSocket("ws://127.0.0.1:" + inPort);
-      const actionInfo = JSON.parse(inActionInfo);
-      loadSettings(actionInfo.payload?.settings ?? {});
-
-      websocket.onopen = () => {
-        websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: inPropertyInspectorUUID }));
-      };
-      websocket.onmessage = (evt) => {
-        const msg = JSON.parse(evt.data);
-        if (msg.event === "didReceiveSettings") loadSettings(msg.payload.settings ?? {});
-      };
-      window.sendToPlugin = (payload) => {
-        websocket.send(JSON.stringify({ event: "setSettings", context: inPropertyInspectorUUID, payload: payload.payload }));
-      };
-
-      folderPathEl.addEventListener("input", () => { validatePath(); saveSettings(); });
-      minConfEl.addEventListener("change", saveSettings);
-      createFSEl.addEventListener("change", saveSettings);
+      minConfEl.addEventListener("change", function () { saveSettings(gatherSettings()); });
+      createFSEl.addEventListener("change", function () { saveSettings(gatherSettings()); });
     }
   </script>
 </body>

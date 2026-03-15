@@ -8,7 +8,7 @@
  * Uses the centralized extension registry from config.ts.
  */
 
-import { readdirSync, statSync } from "fs";
+import { readdir, stat } from "fs/promises";
 import { join, extname } from "path";
 import { detectMediaType } from "./detector.js";
 import type { MediaType } from "./patterns.js";
@@ -53,14 +53,14 @@ function formatBytes(bytes: number): string {
 /**
  * Recursively gather file stats from a directory.
  */
-function gatherStats(dir: string, maxDepth = DEFAULT_MAX_DEPTH, depth = 0): { files: number; bytes: number; categories: Record<string, number> } {
+async function gatherStats(dir: string, maxDepth = DEFAULT_MAX_DEPTH, depth = 0): Promise<{ files: number; bytes: number; categories: Record<string, number> }> {
   const result = { files: 0, bytes: 0, categories: {} as Record<string, number> };
 
   if (depth > maxDepth) return result;
 
   let entries: string[];
   try {
-    entries = readdirSync(dir);
+    entries = await readdir(dir);
   } catch {
     return result;
   }
@@ -68,23 +68,23 @@ function gatherStats(dir: string, maxDepth = DEFAULT_MAX_DEPTH, depth = 0): { fi
   for (const name of entries) {
     if (name.startsWith(".")) continue;
     const fullPath = join(dir, name);
-    let stat;
+    let fileStat;
     try {
-      stat = statSync(fullPath);
+      fileStat = await stat(fullPath);
     } catch {
       continue;
     }
 
-    if (stat.isDirectory()) {
-      const sub = gatherStats(fullPath, maxDepth, depth + 1);
+    if (fileStat.isDirectory()) {
+      const sub = await gatherStats(fullPath, maxDepth, depth + 1);
       result.files += sub.files;
       result.bytes += sub.bytes;
       for (const [cat, count] of Object.entries(sub.categories)) {
         result.categories[cat] = (result.categories[cat] ?? 0) + count;
       }
-    } else if (stat.isFile()) {
+    } else if (fileStat.isFile()) {
       result.files++;
-      result.bytes += stat.size;
+      result.bytes += fileStat.size;
 
       const ext = extname(name).toLowerCase();
       let category = "Other";
@@ -104,7 +104,7 @@ function gatherStats(dir: string, maxDepth = DEFAULT_MAX_DEPTH, depth = 0): { fi
 /**
  * Calculate library statistics for a given directory.
  */
-export function calculateLibraryStats(libraryRoot: string): LibraryStats {
+export async function calculateLibraryStats(libraryRoot: string): Promise<LibraryStats> {
   const pathCheck = validateFolderPath(libraryRoot);
   if (!pathCheck.valid) {
     return {
@@ -118,8 +118,8 @@ export function calculateLibraryStats(libraryRoot: string): LibraryStats {
     };
   }
 
-  const raw = gatherStats(libraryRoot);
-  const detection = detectMediaType(libraryRoot);
+  const raw = await gatherStats(libraryRoot);
+  const detection = await detectMediaType(libraryRoot);
 
   const displayStats: LibraryStat[] = [
     { label: "Total Files", value: String(raw.files) },

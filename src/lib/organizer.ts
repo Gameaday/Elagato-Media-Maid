@@ -5,12 +5,23 @@
  * file extension. Uses the centralized extension registry from config.ts.
  */
 
-import { readdirSync, statSync, existsSync } from "fs";
-import { rename, mkdir } from "fs/promises";
+import { rename, mkdir, readdir, stat } from "fs/promises";
 import { join, extname } from "path";
 import { logOperation } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
 import { SORT_CATEGORIES, validateFolderPath } from "./config.js";
+
+/**
+ * Check if a path exists on the filesystem.
+ */
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await stat(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export interface SortRule {
   /** Subfolder name to create */
@@ -73,7 +84,7 @@ export async function sortFolder(
 
   let entries: string[];
   try {
-    entries = readdirSync(folderPath);
+    entries = await readdir(folderPath);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     result.errors["[folder]"] = `Could not read folder: ${msg}`;
@@ -81,13 +92,15 @@ export async function sortFolder(
   }
 
   // Only process files (not subfolders already created)
-  const files = entries.filter(name => {
+  const files: string[] = [];
+  for (const name of entries) {
     try {
-      return statSync(join(folderPath, name)).isFile();
+      const fileStat = await stat(join(folderPath, name));
+      if (fileStat.isFile()) files.push(name);
     } catch {
-      return false;
+      // skip unreadable entries
     }
-  });
+  }
 
   const undoOps: FileOperation[] = [];
   const createdDirs = new Set<string>();
@@ -113,7 +126,7 @@ export async function sortFolder(
 
     if (!dryRun) {
       try {
-        const dirExisted = existsSync(targetDir);
+        const dirExisted = await pathExists(targetDir);
         await mkdir(targetDir, { recursive: true });
         if (!dirExisted && !createdDirs.has(targetDir)) {
           undoOps.push({ type: "mkdir", from: "", to: targetDir });

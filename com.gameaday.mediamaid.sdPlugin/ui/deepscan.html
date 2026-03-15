@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Deep Scan Settings</title>
+  <title>Deep Scan – MediaMaid</title>
   <link rel="stylesheet" href="mediamaid.css">
 </head>
 <body>
@@ -20,68 +20,43 @@
         <input type="checkbox" id="autoFix">
         Automatically fix naming issues
       </label>
+      <div class="sdpi-info">When enabled, short press will scan and rename files in one step. When disabled, short press only reports issues.</div>
     </div>
 
     <hr class="sdpi-divider">
 
-    <div class="sdpi-info">
-      Recursively scans your library for naming inconsistencies.<br>
-      <strong>Key:</strong> Short press = scan + fix · Long press = scan only<br>
-      <strong>Dial:</strong> Rotate to browse issues · Push to scan
+    <div class="sdpi-info sdpi-controls-hint">
+      <strong>▶ Press</strong> scan + fix &nbsp;·&nbsp; <strong>▶ Hold</strong> scan only<br>
+      <strong>↻ Dial</strong> browse issues &nbsp;·&nbsp; <strong>Tap</strong> scan
     </div>
 
   </div>
 
+  <script src="sdpi-common.js"></script>
   <script>
-    const libraryRootEl = document.getElementById("libraryRoot");
-    const autoFixEl     = document.getElementById("autoFix");
-    const pathStatusEl  = document.getElementById("pathStatus");
+    var libraryRootEl = document.getElementById("libraryRoot");
+    var autoFixEl     = document.getElementById("autoFix");
+    var pathStatusEl  = document.getElementById("pathStatus");
 
-    function validatePath() {
-      const path = libraryRootEl.value.trim();
-      if (!path) { pathStatusEl.className = ""; pathStatusEl.textContent = ""; }
-      else if (!path.startsWith("/") && !path.match(/^[A-Za-z]:\\/)) {
-        pathStatusEl.className = "sdpi-warning";
-        pathStatusEl.textContent = "Path should be absolute.";
-      } else {
-        pathStatusEl.className = "sdpi-success";
-        pathStatusEl.textContent = "Ready.";
-      }
+    function gatherSettings() {
+      return {
+        libraryRoot: libraryRootEl.value.trim(),
+        autoFix:     autoFixEl.checked
+      };
     }
 
-    function loadSettings(s) {
+    function onSettingsLoaded(s) {
       libraryRootEl.value = s.libraryRoot || "";
       autoFixEl.checked = s.autoFix || false;
-      validatePath();
+      validatePath(libraryRootEl, pathStatusEl);
     }
 
-    function saveSettings() {
-      const payload = {
-        libraryRoot: libraryRootEl.value.trim(),
-        autoFix: autoFixEl.checked
-      };
-      $PI.websocket && $PI.websocket.send(JSON.stringify({ event: "setSettings", context: $PI.uuid, payload }));
-    }
-
-    const $PI = { websocket: null, uuid: "" };
-
-    function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegisterEvent, inInfo, inActionInfo) {
-      $PI.uuid = inPropertyInspectorUUID;
-      const actionInfo = JSON.parse(inActionInfo);
-      $PI.websocket = new WebSocket("ws://127.0.0.1:" + inPort);
-
-      $PI.websocket.onopen = () => {
-        $PI.websocket.send(JSON.stringify({ event: inRegisterEvent, uuid: $PI.uuid }));
-        $PI.websocket.send(JSON.stringify({ event: "getSettings", context: $PI.uuid }));
-      };
-      $PI.websocket.onmessage = (evt) => {
-        const msg = JSON.parse(evt.data);
-        if (msg.event === "didReceiveSettings") loadSettings(msg.payload.settings);
-      };
-
-      loadSettings(actionInfo.payload?.settings ?? {});
-      libraryRootEl.addEventListener("input", () => { validatePath(); saveSettings(); });
-      autoFixEl.addEventListener("change", saveSettings);
+    function onPiConnected() {
+      libraryRootEl.addEventListener("input", function () {
+        validatePath(libraryRootEl, pathStatusEl);
+        saveSettings(gatherSettings());
+      });
+      autoFixEl.addEventListener("change", function () { saveSettings(gatherSettings()); });
     }
   </script>
 </body>

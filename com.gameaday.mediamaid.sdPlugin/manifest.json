@@ -3,10 +3,33 @@
   "Category": "MediaMaid",
   "CategoryIcon": "imgs/plugin/category",
   "CodePath": "bin/plugin.js",
-  "Description": "MediaMaid – One-touch media organizer and renamer for Jellyfin, Plex, and content curation. Rename TV shows, movies, music, and photos in seconds. Stream Deck+ encoder support for scrolling through patterns and adjusting confidence.",
+  "Description": "One-touch media organizer for Jellyfin, Plex, emulation, and archival collections. Rename, sort, heal, and scan your entire media library from any Stream Deck.",
   "Icon": "imgs/plugin/icon",
   "Name": "MediaMaid",
   "Actions": [
+    {
+      "Icon": "imgs/actions/smartfix/icon",
+      "Name": "Smart Fix ✨",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/smartfix-status.json",
+        "TriggerDescription": {
+          "Rotate": "Adjust confidence",
+          "Push": "Auto-detect & fix",
+          "Touch": "Dry-run preview",
+          "LongTouch": "Rescan folder"
+        }
+      },
+      "PropertyInspectorPath": "ui/smartfix.html",
+      "States": [
+        { "Image": "imgs/actions/smartfix/key", "Title": "Smart Fix" },
+        { "Image": "imgs/actions/smartfix/key-active", "Title": "Scanning…" }
+      ],
+      "DisableAutomaticStates": true,
+      "SupportedInMultiActions": true,
+      "Tooltip": "Best starting point! Automatically detects your media type (TV, movies, music, ROMs, etc.) and applies the correct naming convention. Just point it at a folder and press.",
+      "UUID": "com.gameaday.mediamaid.smartfix"
+    },
     {
       "Icon": "imgs/actions/quickrename/icon",
       "Name": "Quick Rename",
@@ -27,31 +50,8 @@
       ],
       "DisableAutomaticStates": true,
       "SupportedInMultiActions": true,
-      "Tooltip": "Rename files in the configured folder to a chosen media standard (Jellyfin, Photography, Music, etc.). On Stream Deck+, rotate the dial to cycle naming patterns.",
+      "Tooltip": "Rename files to a specific naming standard: Jellyfin TV/Movie, anime, photography, music, books, comics, ROMs, podcasts, YouTube archives, and more. Choose your format in settings.",
       "UUID": "com.gameaday.mediamaid.quickrename"
-    },
-    {
-      "Icon": "imgs/actions/smartfix/icon",
-      "Name": "Smart Fix",
-      "Controllers": ["Keypad", "Encoder"],
-      "Encoder": {
-        "layout": "layouts/smartfix-status.json",
-        "TriggerDescription": {
-          "Rotate": "Adjust confidence",
-          "Push": "Auto-detect & fix",
-          "Touch": "Dry-run preview",
-          "LongTouch": "Rescan folder"
-        }
-      },
-      "PropertyInspectorPath": "ui/smartfix.html",
-      "States": [
-        { "Image": "imgs/actions/smartfix/key", "Title": "Smart Fix" },
-        { "Image": "imgs/actions/smartfix/key-active", "Title": "Scanning…" }
-      ],
-      "DisableAutomaticStates": true,
-      "SupportedInMultiActions": true,
-      "Tooltip": "Automatically detect the media type in the target folder and apply the best naming convention. On Stream Deck+, rotate to adjust confidence threshold.",
-      "UUID": "com.gameaday.mediamaid.smartfix"
     },
     {
       "Icon": "imgs/actions/nukedownloads/icon",
@@ -72,20 +72,31 @@
       ],
       "DisableAutomaticStates": true,
       "SupportedInMultiActions": true,
-      "Tooltip": "Sort files in the target folder into subfolders by type: Images, Videos, Audio, Documents, Installers, and Other.",
+      "Tooltip": "Instantly sort a messy Downloads folder into organized subfolders: Images, Videos, Audio, Documents, eBooks, Comics, ROMs, Archives, and more.",
       "UUID": "com.gameaday.mediamaid.nukedownloads"
     },
     {
-      "Icon": "imgs/actions/undo/icon",
-      "Name": "Undo Last Action",
-      "Controllers": ["Keypad"],
-      "PropertyInspectorPath": "ui/undo.html",
+      "Icon": "imgs/actions/healer/icon",
+      "Name": "Collection Healer",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/healer-status.json",
+        "TriggerDescription": {
+          "Rotate": "Browse issues",
+          "Push": "Heal collection",
+          "Touch": "Diagnose only",
+          "LongTouch": "Dry-run heal"
+        }
+      },
+      "PropertyInspectorPath": "ui/healer.html",
       "States": [
-        { "Image": "imgs/actions/undo/key", "Title": "Undo" }
+        { "Image": "imgs/actions/healer/key", "Title": "Heal" },
+        { "Image": "imgs/actions/healer/key-active", "Title": "Healing…" }
       ],
+      "DisableAutomaticStates": true,
       "SupportedInMultiActions": true,
-      "Tooltip": "Revert the most recent MediaMaid rename or organization operation.",
-      "UUID": "com.gameaday.mediamaid.undo"
+      "Tooltip": "Fix years of inconsistent naming across an entire collection. Detects missing metadata, junk scene tags, episode gaps, quality mismatches, and more — then batch-fixes everything.",
+      "UUID": "com.gameaday.mediamaid.healer"
     },
     {
       "Icon": "imgs/actions/deepscan/icon",
@@ -95,19 +106,51 @@
         "layout": "layouts/deepscan-status.json",
         "TriggerDescription": {
           "Rotate": "Browse results",
-          "Push": "Start scan",
-          "Touch": "View report"
+          "Push": "Scan + fix",
+          "Touch": "Scan only"
         }
       },
       "PropertyInspectorPath": "ui/deepscan.html",
       "States": [
-        { "Image": "imgs/actions/deepscan/key", "Title": "Deep Scan" },
+        { "Image": "imgs/actions/deepscan/key", "Title": "Deep\nScan" },
         { "Image": "imgs/actions/deepscan/key-active", "Title": "Scanning…" }
       ],
       "DisableAutomaticStates": true,
       "SupportedInMultiActions": false,
-      "Tooltip": "Recursively scan a library root for naming inconsistencies across all subfolders. Reports misnamed files and auto-fixes them.",
+      "Tooltip": "Recursively scan an entire library tree and report a health score. Finds misnamed files across all subfolders and optionally auto-fixes them.",
       "UUID": "com.gameaday.mediamaid.deepscan"
+    },
+    {
+      "Icon": "imgs/actions/undo/icon",
+      "Name": "Undo",
+      "Controllers": ["Keypad"],
+      "PropertyInspectorPath": "ui/undo.html",
+      "States": [
+        { "Image": "imgs/actions/undo/key", "Title": "Undo" }
+      ],
+      "SupportedInMultiActions": true,
+      "Tooltip": "Revert the most recent MediaMaid operation. Keeps a rolling history of up to 10 batches.",
+      "UUID": "com.gameaday.mediamaid.undo"
+    },
+    {
+      "Icon": "imgs/actions/librarystats/icon",
+      "Name": "Library Stats",
+      "Controllers": ["Keypad", "Encoder"],
+      "Encoder": {
+        "layout": "layouts/library-stats.json",
+        "TriggerDescription": {
+          "Rotate": "Cycle stats",
+          "Push": "Refresh",
+          "Touch": "Show details"
+        }
+      },
+      "PropertyInspectorPath": "ui/librarystats.html",
+      "States": [
+        { "Image": "imgs/actions/librarystats/key", "Title": "Stats" }
+      ],
+      "SupportedInMultiActions": false,
+      "Tooltip": "View library statistics: file counts by type, total size, and naming health score. On Stream Deck+ the touchscreen shows a live dashboard.",
+      "UUID": "com.gameaday.mediamaid.librarystats"
     },
     {
       "Icon": "imgs/actions/nfoeditor/icon",
@@ -128,32 +171,12 @@
       ],
       "DisableAutomaticStates": true,
       "SupportedInMultiActions": false,
-      "Tooltip": "Create, update, and edit NFO metadata files for Jellyfin/Kodi media libraries. Premium feature.",
+      "Tooltip": "Create and edit NFO metadata files for Jellyfin/Kodi libraries. Premium feature.",
       "UUID": "com.gameaday.mediamaid.nfoeditor"
-    },
-    {
-      "Icon": "imgs/actions/librarystats/icon",
-      "Name": "Library Stats",
-      "Controllers": ["Encoder"],
-      "Encoder": {
-        "layout": "layouts/library-stats.json",
-        "TriggerDescription": {
-          "Rotate": "Cycle stats",
-          "Push": "Refresh",
-          "Touch": "Show details"
-        }
-      },
-      "PropertyInspectorPath": "ui/librarystats.html",
-      "States": [
-        { "Image": "imgs/actions/librarystats/key", "Title": "Stats" }
-      ],
-      "SupportedInMultiActions": false,
-      "Tooltip": "Stream Deck+ only. Shows real-time library statistics on the touchscreen: file counts by type, total size, naming health score.",
-      "UUID": "com.gameaday.mediamaid.librarystats"
     }
   ],
   "UUID": "com.gameaday.mediamaid",
-  "Version": "1.0.0.0",
+  "Version": "1.1.0.0",
   "SDKVersion": 2,
   "Software": { "MinimumVersion": "6.8" },
   "OS": [
