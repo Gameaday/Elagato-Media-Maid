@@ -136,28 +136,55 @@ describe("estimateRomCompression", () => {
 // buildTranscodeCommand
 // ---------------------------------------------------------------------------
 describe("buildTranscodeCommand", () => {
-  it("builds HEVC medium command", () => {
-    const cmd = buildTranscodeCommand("/movies/test.mp4", "hevc_medium");
+  it("builds HEVC high-fidelity command with 10-bit and slow preset", () => {
+    const cmd = buildTranscodeCommand("/movies/test.mp4", "hevc_hifi");
     expect(cmd).not.toBeNull();
     expect(cmd!.command).toContain("ffmpeg");
     expect(cmd!.command).toContain("libx265");
     expect(cmd!.command).toContain("-crf");
-    expect(cmd!.command).toContain("22");
+    expect(cmd!.command).toContain("18");
+    expect(cmd!.command).toContain("slow");
+    expect(cmd!.command).toContain("yuv420p10le");
     expect(cmd!.output).toContain(".mkv");
     expect(cmd!.input).toBe("/movies/test.mp4");
   });
 
-  it("builds HEVC small command", () => {
-    const cmd = buildTranscodeCommand("/movies/test.avi", "hevc_small");
+  it("builds HEVC balanced command", () => {
+    const cmd = buildTranscodeCommand("/movies/test.avi", "hevc_balanced");
+    expect(cmd).not.toBeNull();
+    expect(cmd!.command).toContain("-crf");
+    expect(cmd!.command).toContain("22");
+    expect(cmd!.command).toContain("slow");
+    expect(cmd!.command).toContain("yuv420p10le");
+  });
+
+  it("builds HEVC compact command", () => {
+    const cmd = buildTranscodeCommand("/movies/test.avi", "hevc_compact");
     expect(cmd).not.toBeNull();
     expect(cmd!.command).toContain("-crf");
     expect(cmd!.command).toContain("26");
+    expect(cmd!.command).toContain("slow");
   });
 
-  it("builds AV1 quality command", () => {
+  it("builds HEVC HDR preserve command with HDR metadata", () => {
+    const cmd = buildTranscodeCommand("/movies/test.mp4", "hevc_hdr");
+    expect(cmd).not.toBeNull();
+    expect(cmd!.command).toContain("hdr-opt=1");
+    expect(cmd!.command).toContain("bt2020");
+    expect(cmd!.command).toContain("smpte2084");
+    expect(cmd!.command).toContain("yuv420p10le");
+    // HDR preset preserves original audio rather than re-encoding
+    expect(cmd!.preset.ffmpegArgs).toContain("-c:a");
+    expect(cmd!.preset.ffmpegArgs).toContain("copy");
+  });
+
+  it("builds AV1 quality command with 10-bit and opus audio", () => {
     const cmd = buildTranscodeCommand("/movies/test.mkv", "av1_quality");
     expect(cmd).not.toBeNull();
     expect(cmd!.command).toContain("libsvtav1");
+    expect(cmd!.command).toContain("28");
+    expect(cmd!.command).toContain("yuv420p10le");
+    expect(cmd!.command).toContain("libopus");
   });
 
   it("builds copy/remux command", () => {
@@ -174,16 +201,25 @@ describe("buildTranscodeCommand", () => {
   });
 
   it("avoids overwriting input when extensions match", () => {
-    const cmd = buildTranscodeCommand("/movies/test.mkv", "hevc_medium");
+    const cmd = buildTranscodeCommand("/movies/test.mkv", "hevc_balanced");
     expect(cmd).not.toBeNull();
     // Output should be different from input since both are .mkv
     expect(cmd!.output).not.toBe(cmd!.input);
   });
 
   it("uses custom output directory when provided", () => {
-    const cmd = buildTranscodeCommand("/movies/test.mp4", "hevc_medium", "/output");
+    const cmd = buildTranscodeCommand("/movies/test.mp4", "hevc_balanced", "/output");
     expect(cmd).not.toBeNull();
     expect(cmd!.output).toContain("/output/");
+  });
+
+  it("all presets include streaming-friendly flags", () => {
+    // Non-remux presets that re-encode should use slow preset and 10-bit
+    for (const presetName of ["hevc_hifi", "hevc_balanced", "hevc_compact", "hevc_hdr", "av1_quality"]) {
+      const cmd = buildTranscodeCommand("/movies/test.mp4", presetName);
+      expect(cmd).not.toBeNull();
+      expect(cmd!.command).toContain("yuv420p10le");
+    }
   });
 });
 
@@ -245,19 +281,19 @@ describe("planTranscode", () => {
     writeFileSync(join(tmpDir, "readme.txt"), "x");
     writeFileSync(join(tmpDir, "photo.jpg"), "x");
 
-    const commands = await planTranscode(tmpDir, "hevc_medium");
+    const commands = await planTranscode(tmpDir, "hevc_balanced");
     expect(commands).toHaveLength(2);
     expect(commands.every(c => c.command.includes("ffmpeg"))).toBe(true);
   });
 
   it("returns empty array for nonexistent folder", async () => {
-    const commands = await planTranscode("/nonexistent", "hevc_medium");
+    const commands = await planTranscode("/nonexistent", "hevc_balanced");
     expect(commands).toHaveLength(0);
   });
 
   it("returns empty array for folder with no videos", async () => {
     writeFileSync(join(tmpDir, "readme.txt"), "x");
-    const commands = await planTranscode(tmpDir, "hevc_medium");
+    const commands = await planTranscode(tmpDir, "hevc_balanced");
     expect(commands).toHaveLength(0);
   });
 });

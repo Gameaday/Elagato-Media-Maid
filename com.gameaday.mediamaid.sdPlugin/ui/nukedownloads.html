@@ -65,10 +65,16 @@
       <label class="sdpi-item-label" for="transcodePreset">Video Compression</label>
       <select id="transcodePreset">
         <option value="none">None (default)</option>
-        <option value="copy_mkv">Remux to MKV (lossless, fast)</option>
-        <option value="hevc_medium">HEVC Medium — ~50% smaller</option>
-        <option value="hevc_small">HEVC Smaller — archival quality</option>
-        <option value="av1_quality">AV1 Quality — best compression (slow)</option>
+        <option value="copy_mkv">Remux to MKV (lossless, instant)</option>
+        <optgroup label="HEVC (H.265) — streaming-optimized">
+          <option value="hevc_hifi">High Fidelity — CRF 18, 10-bit, near-transparent</option>
+          <option value="hevc_balanced">Balanced — CRF 22, 10-bit, ~50% smaller</option>
+          <option value="hevc_compact">Compact — CRF 26, 10-bit, space-efficient</option>
+          <option value="hevc_hdr">HDR Preserve — CRF 20, 10-bit, keeps HDR metadata</option>
+        </optgroup>
+        <optgroup label="AV1 — maximum compression">
+          <option value="av1_quality">AV1 Quality — CRF 28, 10-bit (very slow)</option>
+        </optgroup>
       </select>
       <div class="sdpi-info">Requires FFmpeg on PATH. Generates transcode commands logged for review. Videos are NOT re-encoded automatically without confirmation.</div>
     </div>

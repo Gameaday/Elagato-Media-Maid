@@ -393,18 +393,38 @@ describe("DISC_ROM_EXTS", () => {
 });
 
 describe("TRANSCODE_PRESETS", () => {
-  it("has hevc_medium preset", () => {
-    expect(TRANSCODE_PRESETS.hevc_medium).toBeDefined();
-    expect(TRANSCODE_PRESETS.hevc_medium.ffmpegArgs).toContain("libx265");
+  it("has hevc_hifi preset with slow, 10-bit, CRF 18", () => {
+    expect(TRANSCODE_PRESETS.hevc_hifi).toBeDefined();
+    expect(TRANSCODE_PRESETS.hevc_hifi.ffmpegArgs).toContain("libx265");
+    expect(TRANSCODE_PRESETS.hevc_hifi.ffmpegArgs).toContain("slow");
+    expect(TRANSCODE_PRESETS.hevc_hifi.ffmpegArgs).toContain("18");
+    expect(TRANSCODE_PRESETS.hevc_hifi.ffmpegArgs).toContain("yuv420p10le");
   });
 
-  it("has hevc_small preset", () => {
-    expect(TRANSCODE_PRESETS.hevc_small).toBeDefined();
+  it("has hevc_balanced preset with slow, 10-bit, CRF 22", () => {
+    expect(TRANSCODE_PRESETS.hevc_balanced).toBeDefined();
+    expect(TRANSCODE_PRESETS.hevc_balanced.ffmpegArgs).toContain("slow");
+    expect(TRANSCODE_PRESETS.hevc_balanced.ffmpegArgs).toContain("22");
   });
 
-  it("has av1_quality preset", () => {
+  it("has hevc_compact preset with slow, 10-bit, CRF 26", () => {
+    expect(TRANSCODE_PRESETS.hevc_compact).toBeDefined();
+    expect(TRANSCODE_PRESETS.hevc_compact.ffmpegArgs).toContain("slow");
+    expect(TRANSCODE_PRESETS.hevc_compact.ffmpegArgs).toContain("26");
+  });
+
+  it("has hevc_hdr preset with HDR metadata passthrough", () => {
+    expect(TRANSCODE_PRESETS.hevc_hdr).toBeDefined();
+    const argsStr = TRANSCODE_PRESETS.hevc_hdr.ffmpegArgs.join(" ");
+    expect(argsStr).toContain("hdr-opt=1");
+    expect(argsStr).toContain("bt2020");
+    expect(argsStr).toContain("smpte2084");
+  });
+
+  it("has av1_quality preset with 10-bit", () => {
     expect(TRANSCODE_PRESETS.av1_quality).toBeDefined();
     expect(TRANSCODE_PRESETS.av1_quality.ffmpegArgs).toContain("libsvtav1");
+    expect(TRANSCODE_PRESETS.av1_quality.ffmpegArgs).toContain("yuv420p10le");
   });
 
   it("has copy_mkv preset", () => {
@@ -419,6 +439,18 @@ describe("TRANSCODE_PRESETS", () => {
       expect(preset.description).toBeTruthy();
       expect(Array.isArray(preset.ffmpegArgs)).toBe(true);
       expect(preset.outputExt).toBeTruthy();
+    }
+  });
+
+  it("all re-encoding presets use 10-bit pixel format", () => {
+    for (const key of ["hevc_hifi", "hevc_balanced", "hevc_compact", "hevc_hdr", "av1_quality"]) {
+      expect(TRANSCODE_PRESETS[key].ffmpegArgs).toContain("yuv420p10le");
+    }
+  });
+
+  it("HEVC streaming presets use AAC audio for compatibility", () => {
+    for (const key of ["hevc_hifi", "hevc_balanced", "hevc_compact"]) {
+      expect(TRANSCODE_PRESETS[key].ffmpegArgs).toContain("aac");
     }
   });
 });

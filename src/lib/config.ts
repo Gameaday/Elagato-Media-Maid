@@ -230,22 +230,64 @@ export interface TranscodePreset {
 }
 
 export const TRANSCODE_PRESETS: Record<string, TranscodePreset> = {
-  hevc_medium: {
-    label: "HEVC Medium (CRF 22)",
-    description: "Good quality, ~50% size reduction. Widely compatible.",
-    ffmpegArgs: ["-c:v", "libx265", "-crf", "22", "-preset", "medium", "-c:a", "copy"],
+  hevc_hifi: {
+    label: "HEVC High Fidelity (CRF 18, 10-bit, slow)",
+    description: "Near-transparent quality, 10-bit color. Best for streaming originals.",
+    ffmpegArgs: [
+      "-c:v", "libx265", "-crf", "18", "-preset", "slow",
+      "-x265-params", "profile=main10:level-idc=51",
+      "-pix_fmt", "yuv420p10le",
+      "-c:a", "aac", "-b:a", "256k", "-ac", "2",
+      "-movflags", "+faststart"
+    ],
     outputExt: ".mkv"
   },
-  hevc_small: {
-    label: "HEVC Smaller (CRF 26)",
-    description: "Smaller files, slight quality loss. Good for archiving.",
-    ffmpegArgs: ["-c:v", "libx265", "-crf", "26", "-preset", "medium", "-c:a", "copy"],
+  hevc_balanced: {
+    label: "HEVC Balanced (CRF 22, 10-bit, slow)",
+    description: "High quality, ~50% smaller. Great fidelity-to-size for streaming.",
+    ffmpegArgs: [
+      "-c:v", "libx265", "-crf", "22", "-preset", "slow",
+      "-x265-params", "profile=main10:level-idc=51",
+      "-pix_fmt", "yuv420p10le",
+      "-c:a", "aac", "-b:a", "192k", "-ac", "2",
+      "-movflags", "+faststart"
+    ],
+    outputExt: ".mkv"
+  },
+  hevc_compact: {
+    label: "HEVC Compact (CRF 26, 10-bit, slow)",
+    description: "Smaller files, good quality. Space-efficient archiving.",
+    ffmpegArgs: [
+      "-c:v", "libx265", "-crf", "26", "-preset", "slow",
+      "-x265-params", "profile=main10",
+      "-pix_fmt", "yuv420p10le",
+      "-c:a", "aac", "-b:a", "128k", "-ac", "2",
+      "-movflags", "+faststart"
+    ],
+    outputExt: ".mkv"
+  },
+  hevc_hdr: {
+    label: "HEVC HDR Preserve (CRF 20, 10-bit, slow)",
+    description: "Preserves HDR10/HLG metadata and original audio. For HDR source material.",
+    ffmpegArgs: [
+      "-c:v", "libx265", "-crf", "20", "-preset", "slow",
+      "-x265-params", "profile=main10:hdr-opt=1:repeat-headers=1:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1):max-cll=1000,400",
+      "-pix_fmt", "yuv420p10le",
+      "-c:a", "copy",
+      "-c:s", "copy"
+    ],
     outputExt: ".mkv"
   },
   av1_quality: {
-    label: "AV1 Quality (CRF 30)",
-    description: "Best compression, very slow. For long-term archiving.",
-    ffmpegArgs: ["-c:v", "libsvtav1", "-crf", "30", "-preset", "6", "-c:a", "copy"],
+    label: "AV1 Quality (CRF 28, 10-bit, preset 4)",
+    description: "Best compression ratio, very slow. Maximum space savings for archival or streaming.",
+    ffmpegArgs: [
+      "-c:v", "libsvtav1", "-crf", "28", "-preset", "4",
+      "-svtav1-params", "tune=0",
+      "-pix_fmt", "yuv420p10le",
+      "-c:a", "libopus", "-b:a", "128k",
+      "-movflags", "+faststart"
+    ],
     outputExt: ".mkv"
   },
   copy_mkv: {
