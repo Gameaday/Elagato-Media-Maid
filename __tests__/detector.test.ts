@@ -132,4 +132,51 @@ describe("detectMediaType", () => {
     const result = await detectMediaType(tmpDir);
     expect(result.mediaType).toBe(MediaType.JELLYFIN_MOVIE);
   });
+
+  it("detects podcast folder with date-named audio files", async () => {
+    touch(tmpDir, "My Show - 2024-01-15 - Episode One.mp3");
+    touch(tmpDir, "My Show - 2024-01-22 - Episode Two.mp3");
+    touch(tmpDir, "My Show - 2024-02-01 - Episode Three.mp3");
+    const result = await detectMediaType(tmpDir);
+    expect(result.mediaType).toBe(MediaType.PODCAST_ARCHIVE);
+  });
+
+  it("detects comic folder with vol/chapter markers", async () => {
+    touch(tmpDir, "One Piece Vol 01 Ch 001.cbz");
+    touch(tmpDir, "One Piece Vol 01 Ch 002.cbz");
+    touch(tmpDir, "One Piece Vol 01 Ch 003.cbz");
+    const result = await detectMediaType(tmpDir);
+    expect(result.mediaType).toBe(MediaType.COMICS);
+  });
+
+  it("detects anime with fansub tags only (no absolute numbering)", async () => {
+    touch(tmpDir, "[SubGroup] Naruto - S01E01.mkv");
+    touch(tmpDir, "[SubGroup] Naruto - S01E02.mkv");
+    touch(tmpDir, "[SubGroup] Naruto - S01E03.mkv");
+    const result = await detectMediaType(tmpDir);
+    expect(result.mediaType).toBe(MediaType.ANIME);
+  });
+
+  it("detects YouTube archive with a single video ID file", async () => {
+    touch(tmpDir, "How to Code [dQw4w9WgXcQ].mp4");
+    const result = await detectMediaType(tmpDir);
+    expect(result.mediaType).toBe(MediaType.YOUTUBE_ARCHIVE);
+  });
+
+  it("prefers podcast over music when audio files have dates", async () => {
+    touch(tmpDir, "2024-03-10 - Interview with Guest.mp3");
+    touch(tmpDir, "2024-03-17 - Special Episode.mp3");
+    touch(tmpDir, "2024-03-24 - Roundtable.mp3");
+    touch(tmpDir, "bonus track.mp3");
+    const result = await detectMediaType(tmpDir);
+    expect(result.mediaType).toBe(MediaType.PODCAST_ARCHIVE);
+  });
+
+  it("detects comic files (cbr) without vol/chapter markers", async () => {
+    touch(tmpDir, "Batman Issue 1.cbr");
+    touch(tmpDir, "Batman Issue 2.cbr");
+    touch(tmpDir, "Batman Issue 3.cbr");
+    const result = await detectMediaType(tmpDir);
+    expect(result.mediaType).toBe(MediaType.COMICS);
+  });
 });

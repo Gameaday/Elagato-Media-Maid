@@ -440,6 +440,12 @@ export const ROM_TAG_RE = /\s*\[[\w!]+\]/g;
 /** Regex to extract the first parenthesised region tag from a ROM filename */
 export const ROM_REGION_RE = /\(([^)]+)\)/;
 
+/**
+ * Regex to detect ISO 8601-style date patterns in filenames (YYYY-MM-DD).
+ * Used for podcast and date-hierarchy detection.
+ */
+export const DATE_FILENAME_RE = /\b\d{4}-\d{2}-\d{2}\b/;
+
 // ── Filesystem helpers ─────────────────────────────────────────────
 
 import { existsSync, accessSync, statSync, constants as fsConstants } from "fs";

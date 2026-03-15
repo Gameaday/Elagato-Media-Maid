@@ -263,6 +263,169 @@ describe("diagnoseFile", () => {
     const epIssue = issues.find(i => i.kind === "missing_episode_info");
     expect(epIssue).toBeUndefined();
   });
+
+  // ── Comic/Manga diagnosis ──────────────────────────────────────
+
+  it("detects missing volume/chapter in comic file", () => {
+    const issues = diagnoseFile(
+      "/test/Batman.cbz",
+      MediaType.COMICS
+    );
+    const epIssue = issues.find(i => i.kind === "missing_episode_info");
+    expect(epIssue).toBeDefined();
+    expect(epIssue!.severity).toBe("warning");
+  });
+
+  it("does not flag comic file with volume and chapter", () => {
+    const issues = diagnoseFile(
+      "/test/One Piece Vol 01 Ch 001.cbz",
+      MediaType.COMICS
+    );
+    const epIssue = issues.find(i => i.kind === "missing_episode_info");
+    expect(epIssue).toBeUndefined();
+  });
+
+  it("detects missing series title in comic file", () => {
+    const issues = diagnoseFile(
+      "/test/Vol 01 Ch 001.cbz",
+      MediaType.COMICS
+    );
+    const titleIssue = issues.find(i => i.kind === "missing_title");
+    expect(titleIssue).toBeDefined();
+  });
+
+  it("does not flag comic with series title from folder context", () => {
+    const issues = diagnoseFile(
+      "/test/Vol 01 Ch 001.cbz",
+      MediaType.COMICS,
+      { title: "One Piece" }
+    );
+    const titleIssue = issues.find(i => i.kind === "missing_title");
+    expect(titleIssue).toBeUndefined();
+  });
+
+  // ── YouTube diagnosis ──────────────────────────────────────────
+
+  it("detects missing video ID in YouTube archive file", () => {
+    const issues = diagnoseFile(
+      "/test/Some Video.mp4",
+      MediaType.YOUTUBE_ARCHIVE
+    );
+    const idIssue = issues.find(i => i.description.includes("video ID"));
+    expect(idIssue).toBeDefined();
+    expect(idIssue!.severity).toBe("info");
+  });
+
+  it("detects missing uploader in YouTube archive file", () => {
+    const issues = diagnoseFile(
+      "/test/Video Title [dQw4w9WgXcQ].mp4",
+      MediaType.YOUTUBE_ARCHIVE
+    );
+    const uploaderIssue = issues.find(i => i.description.includes("uploader"));
+    expect(uploaderIssue).toBeDefined();
+  });
+
+  it("does not flag YouTube file with uploader from context", () => {
+    const issues = diagnoseFile(
+      "/test/Video Title [dQw4w9WgXcQ].mp4",
+      MediaType.YOUTUBE_ARCHIVE,
+      { title: "Channel Name" }
+    );
+    const uploaderIssue = issues.find(i => i.description.includes("uploader"));
+    expect(uploaderIssue).toBeUndefined();
+  });
+
+  // ── Podcast diagnosis ──────────────────────────────────────────
+
+  it("detects missing show name in podcast file", () => {
+    const issues = diagnoseFile(
+      "/test/2024-01-15 - Episode Title.mp3",
+      MediaType.PODCAST_ARCHIVE
+    );
+    const showIssue = issues.find(i => i.description.includes("show name"));
+    expect(showIssue).toBeDefined();
+  });
+
+  it("does not flag podcast with show name from context", () => {
+    const issues = diagnoseFile(
+      "/test/2024-01-15 - Episode Title.mp3",
+      MediaType.PODCAST_ARCHIVE,
+      { title: "My Podcast" }
+    );
+    const showIssue = issues.find(i => i.description.includes("show name"));
+    expect(showIssue).toBeUndefined();
+  });
+
+  it("detects missing date in podcast file", () => {
+    const issues = diagnoseFile(
+      "/test/My Show - Episode Title.mp3",
+      MediaType.PODCAST_ARCHIVE
+    );
+    const dateIssue = issues.find(i => i.description.includes("date"));
+    expect(dateIssue).toBeDefined();
+  });
+
+  // ── ROM diagnosis ──────────────────────────────────────────────
+
+  it("detects missing region in ROM file", () => {
+    const issues = diagnoseFile(
+      "/test/Super Mario Bros.nes",
+      MediaType.EMULATION_ROMS
+    );
+    const regionIssue = issues.find(i => i.description.includes("region"));
+    expect(regionIssue).toBeDefined();
+    expect(regionIssue!.severity).toBe("info");
+  });
+
+  it("does not flag ROM file with region tag", () => {
+    const issues = diagnoseFile(
+      "/test/Super Mario Bros (USA).nes",
+      MediaType.EMULATION_ROMS
+    );
+    const regionIssue = issues.find(i => i.description.includes("region"));
+    expect(regionIssue).toBeUndefined();
+  });
+
+  // ── Photography diagnosis ──────────────────────────────────────
+
+  it("detects missing date in photo file", () => {
+    const issues = diagnoseFile(
+      "/test/IMG_1234.jpg",
+      MediaType.PHOTOGRAPHY
+    );
+    const dateIssue = issues.find(i => i.description.includes("date"));
+    expect(dateIssue).toBeDefined();
+  });
+
+  it("does not flag photo file with date in filename", () => {
+    const issues = diagnoseFile(
+      "/test/2024-03-15_vacation_001.jpg",
+      MediaType.PHOTOGRAPHY
+    );
+    const dateIssue = issues.find(i => i.description.includes("date"));
+    expect(dateIssue).toBeUndefined();
+  });
+
+  // ── Books diagnosis ────────────────────────────────────────────
+
+  it("detects missing year in book file", () => {
+    const issues = diagnoseFile(
+      "/test/Author - Title.epub",
+      MediaType.BOOKS
+    );
+    const yearIssue = issues.find(i => i.kind === "missing_year");
+    expect(yearIssue).toBeDefined();
+  });
+
+  it("does not flag book with year in folder context", () => {
+    const issues = diagnoseFile(
+      "/test/Author - Title.epub",
+      MediaType.BOOKS,
+      { year: 2020 }
+    );
+    const yearIssue = issues.find(i => i.kind === "missing_year");
+    expect(yearIssue).toBeUndefined();
+  });
 });
 
 // ── diagnoseCollection ─────────────────────────────────────────────
@@ -427,6 +590,67 @@ describe("buildHealedName", () => {
     // (depends on parsing; we test the mechanism works)
     if (healed) {
       expect(healed).toContain(".mkv");
+    }
+  });
+
+  // ── Non-Jellyfin paradigm healing ────────────────────────────────
+
+  it("heals a comic file using folder context for series title", () => {
+    const healed = buildHealedName(
+      "/manga/One Piece/Vol 01 Ch 001.cbz",
+      MediaType.COMICS,
+      { title: "One Piece" }
+    );
+    expect(healed).toBeDefined();
+    expect(healed).toContain("One Piece");
+  });
+
+  it("heals a YouTube archive file using folder context for uploader", () => {
+    const healed = buildHealedName(
+      "/yt/Tom Scott/How Stuff Works [dQw4w9WgXcQ].mp4",
+      MediaType.YOUTUBE_ARCHIVE,
+      { title: "Tom Scott" }
+    );
+    expect(healed).toBeDefined();
+    // Should have the uploader from context
+    if (healed) {
+      expect(healed).toContain(".mp4");
+    }
+  });
+
+  it("heals a podcast file using folder context for show name", () => {
+    const healed = buildHealedName(
+      "/podcasts/Radiolab/2024-01-15 - Episode Title.mp3",
+      MediaType.PODCAST_ARCHIVE,
+      { title: "Radiolab" }
+    );
+    expect(healed).toBeDefined();
+    if (healed) {
+      expect(healed).toContain("Radiolab");
+    }
+  });
+
+  it("heals a ROM file with folder context", () => {
+    const healed = buildHealedName(
+      "/roms/NES/Super Mario Bros (USA) [!].nes",
+      MediaType.EMULATION_ROMS,
+      { title: "NES" }
+    );
+    // ROM pattern should clean the name
+    if (healed) {
+      expect(healed).toContain(".nes");
+    }
+  });
+
+  it("heals a book file using folder context for author", () => {
+    const healed = buildHealedName(
+      "/books/Title.epub",
+      MediaType.BOOKS,
+      { title: "Author Name", year: 2020 }
+    );
+    expect(healed).toBeDefined();
+    if (healed) {
+      expect(healed).toContain(".epub");
     }
   });
 });

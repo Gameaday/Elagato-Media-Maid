@@ -673,4 +673,80 @@ describe("parseComicPattern", () => {
     expect(meta.volume).toBeUndefined();
     expect(meta.chapter).toBeUndefined();
   });
+
+  it("parses lowercase vol and ch abbreviations", () => {
+    const meta = parseComicPattern("Berserk v12 c45");
+    expect(meta.volume).toBe(12);
+    expect(meta.chapter).toBe(45);
+  });
+
+  it("parses volume with dot separator", () => {
+    const meta = parseComicPattern("Title Vol.03 Ch.010");
+    expect(meta.volume).toBe(3);
+    expect(meta.chapter).toBe(10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseYoutubePattern – edge cases
+// ---------------------------------------------------------------------------
+describe("parseYoutubePattern – edge cases", () => {
+  it("handles filename with both channel and date", () => {
+    const meta = parseYoutubePattern("Channel Name - 20230615 Video Title [abc123DEF-_]");
+    expect(meta.uploader).toBe("Channel Name");
+    expect(meta.videoId).toBe("abc123DEF-_");
+  });
+
+  it("handles title with special characters", () => {
+    const meta = parseYoutubePattern("What's the Deal? (Part 1) [dQw4w9WgXcQ]");
+    expect(meta.title).toBe("What's the Deal? (Part 1)");
+    expect(meta.videoId).toBe("dQw4w9WgXcQ");
+  });
+
+  it("handles filename with only video ID", () => {
+    const meta = parseYoutubePattern("[dQw4w9WgXcQ]");
+    expect(meta.videoId).toBe("dQw4w9WgXcQ");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parsePodcastPattern – edge cases
+// ---------------------------------------------------------------------------
+describe("parsePodcastPattern – edge cases", () => {
+  it("handles podcast show with multiple dashes in title", () => {
+    const meta = parsePodcastPattern("This American Life - 2024-06-15 - Summer Stories");
+    expect(meta.showName).toBe("This American Life");
+    expect(meta.dateTaken).toBe("2024-06-15");
+    expect(meta.episodeTitle).toBe("Summer Stories");
+  });
+
+  it("returns empty for a bare filename with no separators", () => {
+    const meta = parsePodcastPattern("episode42");
+    expect(meta.showName).toBeUndefined();
+    expect(meta.dateTaken).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseAnimePattern – edge cases
+// ---------------------------------------------------------------------------
+describe("parseAnimePattern – edge cases", () => {
+  it("parses anime with multiple fansub-style brackets", () => {
+    const meta = parseAnimePattern("[SubGroup] My Hero Academia - 05 [720p]");
+    expect(meta.title).toBe("My Hero Academia");
+    expect(meta.absoluteEpisode).toBe(5);
+  });
+
+  it("handles anime title with dots", () => {
+    const meta = parseAnimePattern("Steins.Gate.S01E001.Prologue");
+    expect(meta.title).toBe("Steins Gate");
+    expect(meta.season).toBe(1);
+    expect(meta.absoluteEpisode).toBe(1);
+    expect(meta.episodeTitle).toBe("Prologue");
+  });
+
+  it("handles episode number without leading zeros", () => {
+    const meta = parseAnimePattern("[Subs] Dragon Ball - 42");
+    expect(meta.absoluteEpisode).toBe(42);
+  });
 });

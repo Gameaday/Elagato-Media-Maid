@@ -417,6 +417,112 @@ export function diagnoseFile(
     }
   }
 
+  if (mediaType === MediaType.COMICS) {
+    const comicMeta = parseComicPattern(baseName);
+    if (!comicMeta.volume && !comicMeta.chapter) {
+      issues.push({
+        filePath,
+        currentName: fileName,
+        kind: "missing_episode_info",
+        severity: "warning",
+        description: "Comic/manga file has no volume or chapter numbering"
+      });
+    }
+    if (!comicMeta.title && !context?.title) {
+      issues.push({
+        filePath,
+        currentName: fileName,
+        kind: "missing_title",
+        severity: "warning",
+        description: "Comic/manga file has no identifiable series title"
+      });
+    }
+  }
+
+  if (mediaType === MediaType.YOUTUBE_ARCHIVE) {
+    const ytMeta = parseYoutubePattern(baseName);
+    if (!ytMeta.videoId) {
+      issues.push({
+        filePath,
+        currentName: fileName,
+        kind: "missing_title",
+        severity: "info",
+        description: "YouTube archive file has no video ID — may cause duplicates"
+      });
+    }
+    if (!ytMeta.uploader && !context?.title) {
+      issues.push({
+        filePath,
+        currentName: fileName,
+        kind: "missing_title",
+        severity: "warning",
+        description: "YouTube archive file has no identifiable uploader/channel name"
+      });
+    }
+  }
+
+  if (mediaType === MediaType.PODCAST_ARCHIVE) {
+    const podMeta = parsePodcastPattern(baseName);
+    if (!podMeta.showName && !context?.title) {
+      issues.push({
+        filePath,
+        currentName: fileName,
+        kind: "missing_title",
+        severity: "warning",
+        description: "Podcast file has no identifiable show name"
+      });
+    }
+    if (!podMeta.dateTaken) {
+      issues.push({
+        filePath,
+        currentName: fileName,
+        kind: "missing_year",
+        severity: "info",
+        description: "Podcast file has no date in filename"
+      });
+    }
+  }
+
+  if (mediaType === MediaType.EMULATION_ROMS) {
+    const romMeta = parseRomPattern(baseName, ext);
+    if (!romMeta.region) {
+      issues.push({
+        filePath,
+        currentName: fileName,
+        kind: "missing_title",
+        severity: "info",
+        description: "ROM file has no region tag (e.g. USA, Europe, Japan)"
+      });
+    }
+  }
+
+  if (mediaType === MediaType.PHOTOGRAPHY) {
+    // Photos should ideally have a date in the filename
+    const hasDate = /\d{4}[-_]\d{2}[-_]\d{2}/.test(baseName);
+    if (!hasDate) {
+      issues.push({
+        filePath,
+        currentName: fileName,
+        kind: "missing_year",
+        severity: "info",
+        description: "Photo file has no date in filename (YYYY-MM-DD recommended)"
+      });
+    }
+  }
+
+  if (mediaType === MediaType.BOOKS) {
+    const year = parseYearFromFilename(baseName);
+    if (!year && !context?.year) {
+      issues.push({
+        filePath,
+        currentName: fileName,
+        kind: "missing_year",
+        severity: "info",
+        description: "Book file has no publication year in filename or folder"
+      });
+    }
+  }
+
   return issues;
 }
 
@@ -930,21 +1036,60 @@ export function buildHealedName(
     case MediaType.EMULATION_ROMS: {
       const parsed = parseRomPattern(baseName, ext);
       Object.assign(meta, parsed);
+      // Context title can help fill missing game title
+      if (context.title && !meta.title) meta.title = context.title;
       break;
     }
     case MediaType.YOUTUBE_ARCHIVE: {
       const parsed = parseYoutubePattern(baseName);
       Object.assign(meta, parsed);
+      // Folder name is typically the channel/uploader name
+      if (context.title && !meta.uploader) meta.uploader = context.title;
       break;
     }
     case MediaType.PODCAST_ARCHIVE: {
       const parsed = parsePodcastPattern(baseName);
       Object.assign(meta, parsed);
+      // Folder name is typically the show name
+      if (context.title && !meta.showName) meta.showName = context.title;
       break;
     }
     case MediaType.COMICS: {
       const parsed = parseComicPattern(baseName);
       Object.assign(meta, parsed);
+      // Folder name is typically the series title
+      if (context.title && !meta.title) meta.title = context.title;
+      break;
+    }
+    case MediaType.PHOTOGRAPHY: {
+      // Extract date from filename patterns like IMG_20200315, YYYYMMDD, YYYY-MM-DD
+      const isoDate = /(\d{4})[-_](\d{2})[-_](\d{2})/.exec(baseName);
+      const compactDate = /\b(20\d{2})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\b/.exec(baseName);
+      if (isoDate) {
+        meta.dateTaken = `${isoDate[1]}-${isoDate[2]}-${isoDate[3]}`;
+      } else if (compactDate) {
+        meta.dateTaken = `${compactDate[1]}-${compactDate[2]}-${compactDate[3]}`;
+      }
+      // Use context for location if available
+      if (context.title) meta.location = context.title;
+      meta.index = meta.index ?? 1;
+      break;
+    }
+    case MediaType.BOOKS: {
+      // Treat like music pattern (artist = author, songTitle = book title)
+      const parsed = parseMusicPattern(baseName);
+      Object.assign(meta, parsed);
+      if (context.title && !meta.artist) meta.artist = context.title;
+      if (!meta.year && context.year) meta.year = context.year;
+      break;
+    }
+    case MediaType.DATE_HIERARCHY: {
+      // Preserve original name; extract date for folder path
+      const isoDate = /(\d{4})[-_](\d{2})[-_](\d{2})/.exec(baseName);
+      if (isoDate) {
+        meta.dateTaken = `${isoDate[1]}-${isoDate[2]}-${isoDate[3]}`;
+      }
+      meta.title = baseName;
       break;
     }
     default: {

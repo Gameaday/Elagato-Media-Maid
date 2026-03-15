@@ -47,7 +47,8 @@ import {
   HDR_LABELS,
   COMPRESSIBLE_ROM_EXTS,
   DISC_ROM_EXTS,
-  TRANSCODE_PRESETS
+  TRANSCODE_PRESETS,
+  DATE_FILENAME_RE
 } from "../src/lib/config";
 
 import { mkdirSync, writeFileSync, rmSync } from "fs";
@@ -623,5 +624,26 @@ describe("SORT_CATEGORIES – Comics", () => {
     const comicCat = SORT_CATEGORIES.find(c => c.folder === "Comics");
     expect(comicCat).toBeDefined();
     expect(comicCat!.extensions).toBe(COMIC_EXTS);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// DATE_FILENAME_RE
+// ---------------------------------------------------------------------------
+describe("DATE_FILENAME_RE", () => {
+  it("matches ISO 8601 date in filename", () => {
+    expect(DATE_FILENAME_RE.test("Show - 2024-01-15 - Episode.mp3")).toBe(true);
+  });
+
+  it("matches date at start of filename", () => {
+    expect(DATE_FILENAME_RE.test("2024-03-10 - Title.mp4")).toBe(true);
+  });
+
+  it("does not match year-only strings", () => {
+    expect(DATE_FILENAME_RE.test("2024")).toBe(false);
+  });
+
+  it("does not match partial dates", () => {
+    expect(DATE_FILENAME_RE.test("2024-01")).toBe(false);
   });
 });
