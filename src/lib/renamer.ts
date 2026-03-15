@@ -243,7 +243,7 @@ export function parseYoutubePattern(baseName: string): Partial<FileMetadata> {
   }
 
   // Remove the video ID bracket from the title
-  let cleaned = baseName.replace(/\s*\[[A-Za-z0-9_-]{11}\]$/, "").trim();
+  let cleaned = baseName.replace(YOUTUBE_ID_RE, "").trim();
 
   // Try to extract uploader/channel from "Channel - Title" format
   const channelMatch = /^(.+?)\s*-\s+(.+)$/.exec(cleaned);

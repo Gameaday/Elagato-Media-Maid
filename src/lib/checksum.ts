@@ -21,6 +21,9 @@ import { logOperation } from "./logger.js";
 /** Default manifest filename */
 export const MANIFEST_FILENAME = "checksums.sha256";
 
+/** Regex to parse a single line of a SHA-256 manifest file */
+const SHA256_LINE_RE = /^([a-f0-9]{64})\s+\*?(.+)$/;
+
 /** Result of hashing a single file */
 export interface HashResult {
   /** Relative filename */
@@ -136,7 +139,7 @@ export function parseManifest(content: string): Map<string, string> {
     const trimmed = line.trim();
     if (!trimmed) continue;
     // Format: "<hash>  <filename>" or "<hash> *<filename>" (binary mode)
-    const match = /^([a-f0-9]{64})\s+\*?(.+)$/.exec(trimmed);
+    const match = SHA256_LINE_RE.exec(trimmed);
     if (match) {
       map.set(match[2], match[1]);
     }

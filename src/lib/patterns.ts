@@ -392,7 +392,7 @@ export const comicMangaPattern: NamingPattern = {
 export const dateHierarchyPattern: NamingPattern = {
   mediaType: MediaType.DATE_HIERARCHY,
   label: "Date Hierarchy – YYYY/MM-DD folders",
-  extensions: [
+  extensions: [...new Set([
     ...TV_VIDEO_EXTENSIONS,
     ...PHOTO_EXTENSIONS,
     ...MUSIC_EXTENSIONS,
@@ -401,7 +401,7 @@ export const dateHierarchyPattern: NamingPattern = {
     ...ROM_EXTENSIONS,
     ...COMIC_EXTENSIONS,
     ...PODCAST_EXTENSIONS
-  ].filter((v, i, a) => a.indexOf(v) === i), // deduplicate
+  ])],
   format(meta) {
     // Preserve original filename
     return `${meta.baseName}${meta.ext}`;

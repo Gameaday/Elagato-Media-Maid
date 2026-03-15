@@ -20,6 +20,7 @@ import {
   RESOLUTION_RE,
   YOUTUBE_ID_RE,
   ABSOLUTE_EPISODE_RE,
+  FANSUB_TAG_RE,
   DETECTION_MAX_DEPTH,
   validateFolderPath
 } from "./config.js";
@@ -164,7 +165,7 @@ async function countAnimePatternMatches(dir: string): Promise<number> {
       const ext = extname(name).toLowerCase();
       if (!VIDEO_EXTS.has(ext)) continue;
       // Check for fansub group tags [SubGroup] at start
-      const hasFansubTag = /^\[.+?\]/.test(name);
+      const hasFansubTag = FANSUB_TAG_RE.test(name);
       // Check for absolute episode numbering without SxxExx
       const hasAbsoluteEp = ABSOLUTE_EPISODE_RE.test(name) && !TV_EPISODE_RE.test(name);
       if (hasFansubTag || hasAbsoluteEp) {

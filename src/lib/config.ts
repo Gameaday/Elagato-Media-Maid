@@ -380,6 +380,12 @@ export const COMIC_VOLUME_RE = /\b[Vv](?:ol(?:ume)?)?\.?\s*(\d{1,3})\b/;
  */
 export const COMIC_CHAPTER_RE = /(?:[Cc](?:h(?:apter)?)?\.?\s*|#)(\d{1,4})\b/;
 
+/**
+ * Regex to detect fansub group tags at the start of anime filenames.
+ * Matches [SubGroup], [Fansub-Group], etc.
+ */
+export const FANSUB_TAG_RE = /^\[.+?\]/;
+
 /** Regex to strip ROM scene/dump tags like [!], [b], [h1], [o2] from filenames */
 export const ROM_TAG_RE = /\s*\[[\w!]+\]/g;
 
