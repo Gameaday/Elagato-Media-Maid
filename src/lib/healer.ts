@@ -64,7 +64,11 @@ export type IssueKind =
   | "wrong_extension_case"
   | "orphan_subtitle"
   | "orphan_nfo"
-  | "missing_resolution_tag";
+  | "missing_resolution_tag"
+  | "missing_episode_gap"
+  | "lower_quality"
+  | "inconsistent_naming_scheme"
+  | "duplicate_episode";
 
 export interface FileIssue {
   /** Full path to the file */
@@ -81,6 +85,36 @@ export interface FileIssue {
   suggestedName?: string;
 }
 
+/** Describes a gap in episode numbering */
+export interface EpisodeGap {
+  /** Season number (undefined for absolute numbering) */
+  season?: number;
+  /** Missing episode numbers */
+  missingEpisodes: number[];
+  /** Total expected episodes based on range */
+  expectedCount: number;
+  /** Total found episodes */
+  foundCount: number;
+}
+
+/** Quality info for a single file in a series */
+export interface FileQualityInfo {
+  filePath: string;
+  resolution?: string;
+  source?: string;
+  hdr?: string;
+}
+
+/** Report of quality inconsistencies in a collection */
+export interface QualityReport {
+  /** The dominant (most common) resolution in the collection */
+  dominantResolution?: string;
+  /** Files at lower-than-dominant resolution */
+  lowerQualityFiles: FileQualityInfo[];
+  /** All unique resolutions found and their counts */
+  resolutionCounts: Record<string, number>;
+}
+
 export interface DiagnoseResult {
   /** Total files examined */
   filesExamined: number;
@@ -94,6 +128,12 @@ export interface DiagnoseResult {
   detectedType: MediaType;
   /** Overall health score 0–100 */
   healthScore: number;
+  /** Episode gaps detected in TV/anime collections */
+  episodeGaps: EpisodeGap[];
+  /** Quality inconsistency report */
+  qualityReport?: QualityReport;
+  /** Files using an inconsistent naming scheme compared to siblings */
+  namingInconsistencies: string[];
 }
 
 export interface HealResult {
@@ -380,6 +420,219 @@ export function diagnoseFile(
   return issues;
 }
 
+// ── Series gap detection ───────────────────────────────────────────
+
+/** Resolution ranking: higher = better quality */
+const RESOLUTION_RANK: Record<string, number> = {
+  "480p": 1,
+  "576p": 2,
+  "720p": 3,
+  "1080p": 4,
+  "4K": 5
+};
+
+/**
+ * Scan a list of video files for episode numbering gaps.
+ * Groups episodes by season and finds missing numbers in the expected range.
+ */
+export function scanSeriesGaps(
+  files: string[],
+  mediaType: MediaType
+): EpisodeGap[] {
+  const gaps: EpisodeGap[] = [];
+
+  if (
+    mediaType !== MediaType.JELLYFIN_TV &&
+    mediaType !== MediaType.ANIME
+  ) {
+    return gaps;
+  }
+
+  // Build a map of season → set of episode numbers
+  const seasonEpisodes = new Map<number | undefined, Set<number>>();
+
+  for (const filePath of files) {
+    const ext = extname(filePath).toLowerCase();
+    if (!VIDEO_EXTS.has(ext)) continue;
+
+    const base = basename(filePath, ext);
+    const tvMeta = parseTvPattern(base);
+
+    if (tvMeta.season !== undefined && tvMeta.episode !== undefined) {
+      const key = tvMeta.season;
+      if (!seasonEpisodes.has(key)) seasonEpisodes.set(key, new Set());
+      seasonEpisodes.get(key)!.add(tvMeta.episode);
+    } else if (mediaType === MediaType.ANIME) {
+      const animeMeta = parseAnimePattern(base);
+      if (animeMeta.absoluteEpisode !== undefined) {
+        const key = undefined; // absolute numbering has no season
+        if (!seasonEpisodes.has(key)) seasonEpisodes.set(key, new Set());
+        seasonEpisodes.get(key)!.add(animeMeta.absoluteEpisode);
+      } else if (animeMeta.episode !== undefined) {
+        const key = animeMeta.season ?? 1;
+        if (!seasonEpisodes.has(key)) seasonEpisodes.set(key, new Set());
+        seasonEpisodes.get(key)!.add(animeMeta.episode);
+      }
+    }
+  }
+
+  // For each season, find gaps between min and max episode number
+  for (const [season, episodes] of seasonEpisodes) {
+    if (episodes.size < 2) continue; // need at least 2 episodes to detect gaps
+
+    const sorted = Array.from(episodes).sort((a, b) => a - b);
+    const min = sorted[0];
+    const max = sorted[sorted.length - 1];
+    const missing: number[] = [];
+
+    for (let ep = min; ep <= max; ep++) {
+      if (!episodes.has(ep)) {
+        missing.push(ep);
+      }
+    }
+
+    if (missing.length > 0) {
+      gaps.push({
+        season,
+        missingEpisodes: missing,
+        expectedCount: max - min + 1,
+        foundCount: episodes.size
+      });
+    }
+  }
+
+  return gaps;
+}
+
+/**
+ * Scan a list of video files for quality inconsistencies.
+ * Identifies the dominant resolution and flags lower-quality files.
+ */
+export function scanQualityInconsistencies(files: string[]): QualityReport {
+  const report: QualityReport = {
+    lowerQualityFiles: [],
+    resolutionCounts: {}
+  };
+
+  const fileInfos: FileQualityInfo[] = [];
+
+  for (const filePath of files) {
+    const ext = extname(filePath).toLowerCase();
+    if (!VIDEO_EXTS.has(ext)) continue;
+
+    const base = basename(filePath, ext);
+    const res = parseResolutionFromFilename(base);
+    const src = parseSourceFromFilename(base);
+    const hdr = parseHdrFromFilename(base);
+
+    if (res) {
+      report.resolutionCounts[res] = (report.resolutionCounts[res] ?? 0) + 1;
+    }
+
+    fileInfos.push({ filePath, resolution: res, source: src, hdr });
+  }
+
+  // Determine dominant resolution (most common)
+  let maxCount = 0;
+  let dominantRes: string | undefined;
+  for (const [res, count] of Object.entries(report.resolutionCounts)) {
+    if (count > maxCount) {
+      maxCount = count;
+      dominantRes = res;
+    }
+  }
+
+  report.dominantResolution = dominantRes;
+
+  // Flag files below dominant resolution
+  if (dominantRes) {
+    const dominantRank = RESOLUTION_RANK[dominantRes] ?? 0;
+    for (const info of fileInfos) {
+      if (!info.resolution) continue;
+      const rank = RESOLUTION_RANK[info.resolution] ?? 0;
+      if (rank < dominantRank) {
+        report.lowerQualityFiles.push(info);
+      }
+    }
+  }
+
+  return report;
+}
+
+/**
+ * Detect naming scheme (SxxExx vs loose vs scene-style) by examining filename patterns.
+ * Returns a scheme label string.
+ */
+export function detectNamingScheme(fileName: string): string {
+  const base = basename(fileName, extname(fileName));
+  // Dash-separated (e.g. "Show - S01E01 - Title") — must check before plain SxxExx
+  if (/\s-\s.*[Ss]\d{1,2}[Ee]\d{1,3}/.test(base)) return "dash_SxxExx";
+  // SxxExx standard
+  if (/[Ss]\d{1,2}[Ee]\d{1,3}/.test(base)) return "SxxExx";
+  // NxNN standard
+  if (/\d{1,2}x\d{2,3}/.test(base)) return "NxNN";
+  // Scene style with dots
+  if (/^[A-Za-z].*\.\d{4}\./.test(base)) return "scene_dots";
+  // Underscore-separated
+  if (/^[A-Za-z].*_S\d{1,2}E\d{1,2}/i.test(base)) return "underscore";
+  // Absolute episode numbering
+  if (/(?:\s-\s|[Ee][Pp]?)\d{2,4}(?:[.\s_-]|$)/.test(base)) return "absolute";
+  return "other";
+}
+
+/**
+ * Scan files for naming scheme inconsistencies within the same directory.
+ * Returns file paths that don't use the dominant naming scheme of their directory.
+ */
+export function scanNamingInconsistencies(files: string[]): string[] {
+  // Group files by directory
+  const dirFiles = new Map<string, string[]>();
+  for (const f of files) {
+    const ext = extname(f).toLowerCase();
+    if (!ALL_MEDIA_EXTS.has(ext)) continue;
+    const dir = dirname(f);
+    if (!dirFiles.has(dir)) dirFiles.set(dir, []);
+    dirFiles.get(dir)!.push(f);
+  }
+
+  const inconsistent: string[] = [];
+
+  for (const [, dirFileList] of dirFiles) {
+    if (dirFileList.length < 2) continue;
+
+    // Count naming schemes in this directory
+    const schemeCounts = new Map<string, number>();
+    const fileSchemes = new Map<string, string>();
+
+    for (const f of dirFileList) {
+      const scheme = detectNamingScheme(f);
+      schemeCounts.set(scheme, (schemeCounts.get(scheme) ?? 0) + 1);
+      fileSchemes.set(f, scheme);
+    }
+
+    // Find the dominant scheme
+    let dominantScheme = "other";
+    let maxCount = 0;
+    for (const [scheme, count] of schemeCounts) {
+      if (count > maxCount) {
+        maxCount = count;
+        dominantScheme = scheme;
+      }
+    }
+
+    // Flag files that don't match the dominant scheme
+    if (maxCount >= 2) {
+      for (const [f, scheme] of fileSchemes) {
+        if (scheme !== dominantScheme && scheme !== "other") {
+          inconsistent.push(f);
+        }
+      }
+    }
+  }
+
+  return inconsistent;
+}
+
 // ── Collection diagnosis ───────────────────────────────────────────
 
 /**
@@ -417,8 +670,66 @@ async function collectFiles(dir: string, maxDepth = DEFAULT_MAX_DEPTH, depth = 0
 }
 
 /**
+ * Detect duplicate episodes (same season+episode number across multiple files).
+ * Useful for finding accidental duplicate downloads or multi-quality versions
+ * that weren't placed in a multi-version folder structure.
+ */
+function detectDuplicateEpisodes(files: string[], mediaType: MediaType): FileIssue[] {
+  if (
+    mediaType !== MediaType.JELLYFIN_TV &&
+    mediaType !== MediaType.ANIME
+  ) {
+    return [];
+  }
+
+  const issues: FileIssue[] = [];
+  // key: "S01E02" → list of file paths
+  const episodeMap = new Map<string, string[]>();
+
+  for (const filePath of files) {
+    const ext = extname(filePath).toLowerCase();
+    if (!VIDEO_EXTS.has(ext)) continue;
+
+    const base = basename(filePath, ext);
+    const tvMeta = parseTvPattern(base);
+
+    let key: string | undefined;
+    if (tvMeta.season !== undefined && tvMeta.episode !== undefined) {
+      key = `S${String(tvMeta.season).padStart(2, "0")}E${String(tvMeta.episode).padStart(2, "0")}`;
+    } else if (mediaType === MediaType.ANIME) {
+      const animeMeta = parseAnimePattern(base);
+      if (animeMeta.absoluteEpisode !== undefined) {
+        key = `EP${String(animeMeta.absoluteEpisode).padStart(3, "0")}`;
+      }
+    }
+
+    if (key) {
+      if (!episodeMap.has(key)) episodeMap.set(key, []);
+      episodeMap.get(key)!.push(filePath);
+    }
+  }
+
+  for (const [key, paths] of episodeMap) {
+    if (paths.length > 1) {
+      for (const p of paths) {
+        issues.push({
+          filePath: p,
+          currentName: basename(p),
+          kind: "duplicate_episode",
+          severity: "warning",
+          description: `Duplicate episode ${key}: ${paths.length} copies found in the collection`
+        });
+      }
+    }
+  }
+
+  return issues;
+}
+
+/**
  * Diagnose an entire collection directory for naming issues.
- * Scans recursively and reports all files with problems.
+ * Scans recursively and reports all files with problems, including
+ * episode gaps, quality inconsistencies, and naming scheme mismatches.
  */
 export async function diagnoseCollection(collectionPath: string): Promise<DiagnoseResult> {
   const result: DiagnoseResult = {
@@ -427,7 +738,9 @@ export async function diagnoseCollection(collectionPath: string): Promise<Diagno
     issuesByKind: {},
     issuesBySeverity: { error: 0, warning: 0, info: 0 },
     detectedType: MediaType.UNKNOWN,
-    healthScore: 100
+    healthScore: 100,
+    episodeGaps: [],
+    namingInconsistencies: []
   };
 
   const pathCheck = validateFolderPath(collectionPath);
@@ -466,6 +779,72 @@ export async function diagnoseCollection(collectionPath: string): Promise<Diagno
       result.issuesByKind[issue.kind] = (result.issuesByKind[issue.kind] ?? 0) + 1;
       result.issuesBySeverity[issue.severity]++;
     }
+  }
+
+  // ── Series gap detection ───────────────────────────────────────
+  result.episodeGaps = scanSeriesGaps(allFiles, detection.mediaType);
+
+  // Create issues for each gap so they appear in the main issues list
+  for (const gap of result.episodeGaps) {
+    const seasonLabel = gap.season !== undefined ? `Season ${gap.season}` : "Absolute";
+    const missingStr = gap.missingEpisodes.length <= 5
+      ? gap.missingEpisodes.join(", ")
+      : `${gap.missingEpisodes.slice(0, 5).join(", ")}… (${gap.missingEpisodes.length} total)`;
+    const issue: FileIssue = {
+      filePath: collectionPath,
+      currentName: basename(collectionPath),
+      kind: "missing_episode_gap",
+      severity: "warning",
+      description: `${seasonLabel}: missing episode(s) ${missingStr} (found ${gap.foundCount}/${gap.expectedCount})`
+    };
+    result.issues.push(issue);
+    result.issuesByKind[issue.kind] = (result.issuesByKind[issue.kind] ?? 0) + 1;
+    result.issuesBySeverity[issue.severity]++;
+  }
+
+  // ── Quality inconsistency detection ────────────────────────────
+  const qualityReport = scanQualityInconsistencies(allFiles);
+  if (Object.keys(qualityReport.resolutionCounts).length > 0) {
+    result.qualityReport = qualityReport;
+  }
+
+  // Create issues for lower-quality files
+  for (const lq of qualityReport.lowerQualityFiles) {
+    const issue: FileIssue = {
+      filePath: lq.filePath,
+      currentName: basename(lq.filePath),
+      kind: "lower_quality",
+      severity: "info",
+      description: `File is ${lq.resolution ?? "unknown resolution"} while collection is predominantly ${qualityReport.dominantResolution}`
+    };
+    result.issues.push(issue);
+    result.issuesByKind[issue.kind] = (result.issuesByKind[issue.kind] ?? 0) + 1;
+    result.issuesBySeverity[issue.severity]++;
+  }
+
+  // ── Naming scheme inconsistency detection ──────────────────────
+  const inconsistentFiles = scanNamingInconsistencies(allFiles);
+  result.namingInconsistencies = inconsistentFiles;
+
+  for (const f of inconsistentFiles) {
+    const issue: FileIssue = {
+      filePath: f,
+      currentName: basename(f),
+      kind: "inconsistent_naming_scheme",
+      severity: "warning",
+      description: `File uses a different naming scheme than the majority of files in its directory`
+    };
+    result.issues.push(issue);
+    result.issuesByKind[issue.kind] = (result.issuesByKind[issue.kind] ?? 0) + 1;
+    result.issuesBySeverity[issue.severity]++;
+  }
+
+  // ── Duplicate episode detection ────────────────────────────────
+  const dupes = detectDuplicateEpisodes(allFiles, detection.mediaType);
+  for (const d of dupes) {
+    result.issues.push(d);
+    result.issuesByKind[d.kind] = (result.issuesByKind[d.kind] ?? 0) + 1;
+    result.issuesBySeverity[d.severity]++;
   }
 
   // Calculate health score: percentage of media files with no issues

@@ -11,7 +11,11 @@ import {
   inferFromFolderName,
   findCommonPrefix,
   buildFolderContext,
-  buildHealedName
+  buildHealedName,
+  scanSeriesGaps,
+  scanQualityInconsistencies,
+  scanNamingInconsistencies,
+  detectNamingScheme
 } from "../src/lib/healer";
 import { MediaType } from "../src/lib/patterns";
 
@@ -510,5 +514,346 @@ describe("healCollection", () => {
     const result = await healCollection(TEST_ROOT, false, MediaType.JELLYFIN_MOVIE);
     // Should not error out due to conflicts
     expect(Object.keys(result.errors).length).toBe(0);
+  });
+});
+
+// ── scanSeriesGaps ────────────────────────────────────────────────
+
+describe("scanSeriesGaps", () => {
+  it("detects missing episodes in a TV series", () => {
+    const files = [
+      "/tv/Show.S01E01.Pilot.mkv",
+      "/tv/Show.S01E02.Episode.Two.mkv",
+      "/tv/Show.S01E04.Episode.Four.mkv",
+      "/tv/Show.S01E05.Episode.Five.mkv"
+    ];
+    const gaps = scanSeriesGaps(files, MediaType.JELLYFIN_TV);
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].season).toBe(1);
+    expect(gaps[0].missingEpisodes).toEqual([3]);
+    expect(gaps[0].foundCount).toBe(4);
+    expect(gaps[0].expectedCount).toBe(5);
+  });
+
+  it("detects multiple missing episodes", () => {
+    const files = [
+      "/tv/Show.S01E01.mkv",
+      "/tv/Show.S01E05.mkv",
+      "/tv/Show.S01E10.mkv"
+    ];
+    const gaps = scanSeriesGaps(files, MediaType.JELLYFIN_TV);
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].missingEpisodes).toContain(2);
+    expect(gaps[0].missingEpisodes).toContain(3);
+    expect(gaps[0].missingEpisodes).toContain(4);
+    expect(gaps[0].missingEpisodes).toContain(6);
+    expect(gaps[0].missingEpisodes.length).toBe(7);
+  });
+
+  it("detects gaps across multiple seasons", () => {
+    const files = [
+      "/tv/Show.S01E01.mkv",
+      "/tv/Show.S01E02.mkv",
+      "/tv/Show.S01E04.mkv",
+      "/tv/Show.S02E01.mkv",
+      "/tv/Show.S02E03.mkv"
+    ];
+    const gaps = scanSeriesGaps(files, MediaType.JELLYFIN_TV);
+    expect(gaps).toHaveLength(2);
+    const s1 = gaps.find(g => g.season === 1);
+    const s2 = gaps.find(g => g.season === 2);
+    expect(s1).toBeDefined();
+    expect(s1!.missingEpisodes).toEqual([3]);
+    expect(s2).toBeDefined();
+    expect(s2!.missingEpisodes).toEqual([2]);
+  });
+
+  it("returns empty for complete series", () => {
+    const files = [
+      "/tv/Show.S01E01.mkv",
+      "/tv/Show.S01E02.mkv",
+      "/tv/Show.S01E03.mkv"
+    ];
+    const gaps = scanSeriesGaps(files, MediaType.JELLYFIN_TV);
+    expect(gaps).toHaveLength(0);
+  });
+
+  it("returns empty for non-TV media types", () => {
+    const files = ["/movie/Inception.2010.mkv"];
+    const gaps = scanSeriesGaps(files, MediaType.JELLYFIN_MOVIE);
+    expect(gaps).toHaveLength(0);
+  });
+
+  it("handles anime absolute numbering gaps", () => {
+    const files = [
+      "/anime/Naruto - 001.mkv",
+      "/anime/Naruto - 002.mkv",
+      "/anime/Naruto - 005.mkv"
+    ];
+    const gaps = scanSeriesGaps(files, MediaType.ANIME);
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].missingEpisodes).toContain(3);
+    expect(gaps[0].missingEpisodes).toContain(4);
+  });
+
+  it("returns empty for a single episode", () => {
+    const files = ["/tv/Show.S01E01.mkv"];
+    const gaps = scanSeriesGaps(files, MediaType.JELLYFIN_TV);
+    expect(gaps).toHaveLength(0);
+  });
+
+  it("ignores non-video files", () => {
+    const files = [
+      "/tv/Show.S01E01.mkv",
+      "/tv/Show.S01E03.mkv",
+      "/tv/Show.S01E02.nfo"
+    ];
+    const gaps = scanSeriesGaps(files, MediaType.JELLYFIN_TV);
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].missingEpisodes).toEqual([2]);
+  });
+});
+
+// ── scanQualityInconsistencies ────────────────────────────────────
+
+describe("scanQualityInconsistencies", () => {
+  it("identifies lower quality files in a collection", () => {
+    const files = [
+      "/tv/Show.S01E01.1080p.mkv",
+      "/tv/Show.S01E02.1080p.mkv",
+      "/tv/Show.S01E03.720p.mkv",
+      "/tv/Show.S01E04.1080p.mkv"
+    ];
+    const report = scanQualityInconsistencies(files);
+    expect(report.dominantResolution).toBe("1080p");
+    expect(report.lowerQualityFiles).toHaveLength(1);
+    expect(report.lowerQualityFiles[0].filePath).toContain("E03");
+    expect(report.lowerQualityFiles[0].resolution).toBe("720p");
+  });
+
+  it("returns empty for consistent quality", () => {
+    const files = [
+      "/tv/Show.S01E01.1080p.mkv",
+      "/tv/Show.S01E02.1080p.mkv",
+      "/tv/Show.S01E03.1080p.mkv"
+    ];
+    const report = scanQualityInconsistencies(files);
+    expect(report.lowerQualityFiles).toHaveLength(0);
+    expect(report.dominantResolution).toBe("1080p");
+  });
+
+  it("reports resolution counts", () => {
+    const files = [
+      "/tv/Show.S01E01.2160p.mkv",
+      "/tv/Show.S01E02.1080p.mkv",
+      "/tv/Show.S01E03.2160p.mkv",
+      "/tv/Show.S01E04.720p.mkv"
+    ];
+    const report = scanQualityInconsistencies(files);
+    expect(report.resolutionCounts["4K"]).toBe(2);
+    expect(report.resolutionCounts["1080p"]).toBe(1);
+    expect(report.resolutionCounts["720p"]).toBe(1);
+    expect(report.dominantResolution).toBe("4K");
+  });
+
+  it("handles files with no resolution tags", () => {
+    const files = [
+      "/tv/Show.S01E01.mkv",
+      "/tv/Show.S01E02.mkv"
+    ];
+    const report = scanQualityInconsistencies(files);
+    expect(report.lowerQualityFiles).toHaveLength(0);
+    expect(Object.keys(report.resolutionCounts)).toHaveLength(0);
+  });
+
+  it("ignores non-video files", () => {
+    const files = [
+      "/tv/Show.S01E01.1080p.mkv",
+      "/tv/cover.720p.jpg"
+    ];
+    const report = scanQualityInconsistencies(files);
+    expect(report.lowerQualityFiles).toHaveLength(0);
+  });
+
+  it("detects 480p as lower quality in a 1080p collection", () => {
+    const files = [
+      "/tv/Show.S01E01.1080p.mkv",
+      "/tv/Show.S01E02.1080p.mkv",
+      "/tv/Show.S01E03.480p.mkv"
+    ];
+    const report = scanQualityInconsistencies(files);
+    expect(report.lowerQualityFiles).toHaveLength(1);
+    expect(report.lowerQualityFiles[0].resolution).toBe("480p");
+  });
+});
+
+// ── detectNamingScheme ────────────────────────────────────────────
+
+describe("detectNamingScheme", () => {
+  it("detects SxxExx scheme", () => {
+    expect(detectNamingScheme("Show.S01E01.Pilot.mkv")).toBe("SxxExx");
+  });
+
+  it("detects NxNN scheme", () => {
+    expect(detectNamingScheme("Show.1x02.Episode.mkv")).toBe("NxNN");
+  });
+
+  it("detects scene dots scheme", () => {
+    expect(detectNamingScheme("Movie.Title.2020.1080p.BluRay.mkv")).toBe("scene_dots");
+  });
+
+  it("detects dash SxxExx scheme", () => {
+    expect(detectNamingScheme("Show - S01E01 - Pilot.mkv")).toBe("dash_SxxExx");
+  });
+
+  it("detects absolute numbering", () => {
+    expect(detectNamingScheme("Naruto - 042.mkv")).toBe("absolute");
+  });
+
+  it("returns other for unrecognized patterns", () => {
+    expect(detectNamingScheme("random file.mkv")).toBe("other");
+  });
+});
+
+// ── scanNamingInconsistencies ─────────────────────────────────────
+
+describe("scanNamingInconsistencies", () => {
+  it("detects files using different naming schemes in same directory", () => {
+    const files = [
+      "/tv/season1/Show.S01E01.Pilot.mkv",
+      "/tv/season1/Show.S01E02.Episode.mkv",
+      "/tv/season1/Show.S01E03.Episode.mkv",
+      "/tv/season1/Show.1x04.Episode.mkv"
+    ];
+    const inconsistent = scanNamingInconsistencies(files);
+    expect(inconsistent).toHaveLength(1);
+    expect(inconsistent[0]).toContain("1x04");
+  });
+
+  it("returns empty for consistent naming", () => {
+    const files = [
+      "/tv/Show.S01E01.mkv",
+      "/tv/Show.S01E02.mkv",
+      "/tv/Show.S01E03.mkv"
+    ];
+    const inconsistent = scanNamingInconsistencies(files);
+    expect(inconsistent).toHaveLength(0);
+  });
+
+  it("returns empty for a single file", () => {
+    const files = ["/tv/Show.S01E01.mkv"];
+    const inconsistent = scanNamingInconsistencies(files);
+    expect(inconsistent).toHaveLength(0);
+  });
+
+  it("works across multiple directories independently", () => {
+    const files = [
+      "/tv/season1/Show.S01E01.mkv",
+      "/tv/season1/Show.S01E02.mkv",
+      "/tv/season2/Show.S02E01.mkv",
+      "/tv/season2/Show.S02E02.mkv",
+      "/tv/season2/Show.2x03.Episode.mkv"
+    ];
+    const inconsistent = scanNamingInconsistencies(files);
+    // Only the NxNN file in season2 should be flagged
+    expect(inconsistent).toHaveLength(1);
+    expect(inconsistent[0]).toContain("season2");
+  });
+});
+
+// ── diagnoseCollection with new features ──────────────────────────
+
+describe("diagnoseCollection (enhanced)", () => {
+  it("detects episode gaps in a TV collection", async () => {
+    createTestFiles({
+      "Show.S01E01.Pilot.mkv": "",
+      "Show.S01E02.Episode.mkv": "",
+      "Show.S01E04.Episode.mkv": ""
+    });
+
+    const result = await diagnoseCollection(TEST_ROOT);
+    expect(result.episodeGaps.length).toBeGreaterThan(0);
+    const gap = result.episodeGaps[0];
+    expect(gap.missingEpisodes).toContain(3);
+  });
+
+  it("reports quality inconsistencies", async () => {
+    createTestFiles({
+      "Show.S01E01.1080p.mkv": "",
+      "Show.S01E02.1080p.mkv": "",
+      "Show.S01E03.720p.mkv": ""
+    });
+
+    const result = await diagnoseCollection(TEST_ROOT);
+    expect(result.qualityReport).toBeDefined();
+    expect(result.qualityReport!.dominantResolution).toBe("1080p");
+    expect(result.qualityReport!.lowerQualityFiles.length).toBe(1);
+  });
+
+  it("includes lower_quality issues in main issues list", async () => {
+    createTestFiles({
+      "Show.S01E01.1080p.mkv": "",
+      "Show.S01E02.1080p.mkv": "",
+      "Show.S01E03.720p.mkv": ""
+    });
+
+    const result = await diagnoseCollection(TEST_ROOT);
+    const lqIssues = result.issues.filter(i => i.kind === "lower_quality");
+    expect(lqIssues.length).toBe(1);
+  });
+
+  it("includes episode gap issues in main issues list", async () => {
+    createTestFiles({
+      "Show.S01E01.mkv": "",
+      "Show.S01E03.mkv": ""
+    });
+
+    const result = await diagnoseCollection(TEST_ROOT);
+    const gapIssues = result.issues.filter(i => i.kind === "missing_episode_gap");
+    expect(gapIssues.length).toBeGreaterThan(0);
+    expect(gapIssues[0].description).toContain("missing episode");
+  });
+
+  it("detects duplicate episodes", async () => {
+    createTestFiles({
+      "Show.S01E01.720p.mkv": "",
+      "Show.S01E01.1080p.mkv": "",
+      "Show.S01E02.1080p.mkv": ""
+    });
+
+    const result = await diagnoseCollection(TEST_ROOT);
+    const dupes = result.issues.filter(i => i.kind === "duplicate_episode");
+    expect(dupes.length).toBe(2); // both copies flagged
+  });
+
+  it("reports naming inconsistencies in the result", async () => {
+    createTestFiles({
+      "Show.S01E01.mkv": "",
+      "Show.S01E02.mkv": "",
+      "Show.S01E03.mkv": "",
+      "Show.1x04.mkv": ""
+    });
+
+    const result = await diagnoseCollection(TEST_ROOT);
+    expect(result.namingInconsistencies.length).toBeGreaterThan(0);
+  });
+
+  it("handles collections with no resolution info for quality report", async () => {
+    createTestFiles({
+      "Show.S01E01.mkv": "",
+      "Show.S01E02.mkv": ""
+    });
+
+    const result = await diagnoseCollection(TEST_ROOT);
+    // Should either be undefined or have no lower quality files
+    if (result.qualityReport) {
+      expect(result.qualityReport.lowerQualityFiles).toHaveLength(0);
+    }
+  });
+
+  it("returns empty arrays for enhanced fields on empty directory", async () => {
+    const result = await diagnoseCollection(TEST_ROOT);
+    expect(result.episodeGaps).toEqual([]);
+    expect(result.namingInconsistencies).toEqual([]);
   });
 });
