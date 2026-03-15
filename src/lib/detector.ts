@@ -16,6 +16,7 @@ import {
   DOCUMENT_EXTS,
   ROM_EXTS,
   TV_EPISODE_RE,
+  RESOLUTION_RE,
   DETECTION_MAX_DEPTH,
   validateFolderPath
 } from "./config.js";
@@ -108,6 +109,27 @@ async function hasNfoFiles(dir: string): Promise<boolean> {
 }
 
 /**
+ * Count video files that contain resolution tags (e.g. "1080p", "2160p", "4K").
+ * Multiple resolution-tagged videos in the same folder suggest a multi-version
+ * movie collection.
+ */
+async function countResolutionTaggedVideos(dir: string): Promise<number> {
+  let count = 0;
+  try {
+    const entries = await readdir(dir);
+    for (const name of entries) {
+      const ext = extname(name).toLowerCase();
+      if (VIDEO_EXTS.has(ext) && RESOLUTION_RE.test(name)) {
+        count++;
+      }
+    }
+  } catch {
+    // ignore read errors
+  }
+  return count;
+}
+
+/**
  * Detect the dominant media type in the given directory.
  */
 export async function detectMediaType(folderPath: string): Promise<DetectionResult> {
@@ -141,6 +163,7 @@ export async function detectMediaType(folderPath: string): Promise<DetectionResu
   const romCount = countMatching(extCounts, ROM_EXTS);
   const tvPatternCount = await countTvPatternMatches(folderPath);
   const nfoPresent = await hasNfoFiles(folderPath);
+  const resTaggedCount = await countResolutionTaggedVideos(folderPath);
 
   // Score each type
   const scores: Array<{ type: MediaType; score: number; reason: string }> = [
@@ -192,7 +215,12 @@ export async function detectMediaType(folderPath: string): Promise<DetectionResu
   // If videos are detected but no TV patterns, lean toward movie
   let finalType = top.type;
   if (top.type === MediaType.JELLYFIN_TV && tvPatternCount === 0 && videoCount <= 3) {
-    finalType = MediaType.JELLYFIN_MOVIE;
+    // If multiple resolution-tagged videos exist, suggest multi-version pattern
+    if (resTaggedCount >= 2) {
+      finalType = MediaType.JELLYFIN_MOVIE_VERSION;
+    } else {
+      finalType = MediaType.JELLYFIN_MOVIE;
+    }
   }
 
   const confidence = Math.min(top.score / totalFiles, 1);

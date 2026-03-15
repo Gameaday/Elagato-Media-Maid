@@ -8,8 +8,8 @@ import { join } from "path";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 
-import { parseTvPattern, parseYearFromFilename, parseRomPattern, renameFolder } from "../src/lib/renamer";
-import { jellyfinTvPattern, jellyfinMoviePattern, emulationRomsPattern } from "../src/lib/patterns";
+import { parseTvPattern, parseYearFromFilename, parseRomPattern, parseResolutionFromFilename, parseMovieTitle, renameFolder } from "../src/lib/renamer";
+import { jellyfinTvPattern, jellyfinMoviePattern, jellyfinMovieVersionPattern, emulationRomsPattern } from "../src/lib/patterns";
 
 // ---------------------------------------------------------------------------
 // parseTvPattern
@@ -59,6 +59,56 @@ describe("parseYearFromFilename", () => {
 
   it("returns undefined when no year present", () => {
     expect(parseYearFromFilename("some title")).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseResolutionFromFilename
+// ---------------------------------------------------------------------------
+describe("parseResolutionFromFilename", () => {
+  it("extracts 1080p", () => {
+    expect(parseResolutionFromFilename("Inception.2010.1080p.BluRay.mkv")).toBe("1080p");
+  });
+
+  it("extracts 720p", () => {
+    expect(parseResolutionFromFilename("Movie.720p.mkv")).toBe("720p");
+  });
+
+  it("normalises 2160p to 4K", () => {
+    expect(parseResolutionFromFilename("Movie.2160p.mkv")).toBe("4K");
+  });
+
+  it("normalises 4K label", () => {
+    expect(parseResolutionFromFilename("Movie.4K.mkv")).toBe("4K");
+  });
+
+  it("extracts 480p", () => {
+    expect(parseResolutionFromFilename("Movie.480p.avi")).toBe("480p");
+  });
+
+  it("returns undefined when no resolution present", () => {
+    expect(parseResolutionFromFilename("Inception")).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseMovieTitle
+// ---------------------------------------------------------------------------
+describe("parseMovieTitle", () => {
+  it("extracts title before year and release tags", () => {
+    expect(parseMovieTitle("Inception.2010.1080p.BluRay.x264")).toBe("Inception");
+  });
+
+  it("extracts multi-word title", () => {
+    expect(parseMovieTitle("The.Dark.Knight.2008.720p")).toBe("The Dark Knight");
+  });
+
+  it("returns baseName when no year/tags present", () => {
+    expect(parseMovieTitle("Inception")).toBe("Inception");
+  });
+
+  it("handles underscores", () => {
+    expect(parseMovieTitle("The_Matrix_1999_1080p")).toBe("The Matrix");
   });
 });
 
@@ -162,6 +212,34 @@ describe("renameFolder – Jellyfin Movie (live)", () => {
     expect(result.renamed).toBe(1);
     const files = readdirSync(tmpDir);
     expect(files.some(f => f.includes("(2010)"))).toBe(true);
+  });
+});
+
+describe("renameFolder – Jellyfin Movie Multi-Version (dry run)", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = createTmpDir();
+    writeFileSync(join(tmpDir, "Inception.2010.1080p.BluRay.mkv"), "");
+    writeFileSync(join(tmpDir, "Inception.2010.2160p.WEB-DL.mkv"), "");
+  });
+
+  afterEach(() => cleanupDir(tmpDir));
+
+  it("includes resolution tag in output", async () => {
+    const result = await renameFolder(tmpDir, jellyfinMovieVersionPattern, true);
+    expect(result.operations.length).toBe(2);
+    const names = result.operations.map(op => op.to.split("/").pop() ?? op.to.split("\\").pop());
+    expect(names.some(n => n?.includes("[1080p]"))).toBe(true);
+    expect(names.some(n => n?.includes("[4K]"))).toBe(true);
+  });
+
+  it("both files get year in output", async () => {
+    const result = await renameFolder(tmpDir, jellyfinMovieVersionPattern, true);
+    for (const op of result.operations) {
+      const name = op.to.split("/").pop() ?? op.to.split("\\").pop() ?? "";
+      expect(name).toContain("(2010)");
+    }
   });
 });
 

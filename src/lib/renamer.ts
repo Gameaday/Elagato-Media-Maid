@@ -12,7 +12,7 @@ import { MediaType } from "./patterns.js";
 import { findAndParseNfo } from "./nfo-parser.js";
 import { logOperation } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
-import { validateFolderPath, RELEASE_TAG_RE, ROM_TAG_RE, ROM_REGION_RE, PLATFORM_MAP } from "./config.js";
+import { validateFolderPath, RELEASE_TAG_RE, ROM_TAG_RE, ROM_REGION_RE, PLATFORM_MAP, RESOLUTION_RE, RESOLUTION_LABELS } from "./config.js";
 
 export interface RenameOperation {
   /** Original full path */
@@ -130,6 +130,30 @@ export function parseYearFromFilename(baseName: string): number | undefined {
 }
 
 /**
+ * Parse video resolution from a filename.
+ * Handles tokens like "1080p", "2160p", "4K", "720p", "480p", "576p".
+ * Returns a normalised label (e.g. "4K" for both "2160p" and "4K").
+ */
+export function parseResolutionFromFilename(baseName: string): string | undefined {
+  const m = RESOLUTION_RE.exec(baseName);
+  if (!m) return undefined;
+  const raw = m[1];
+  return RESOLUTION_LABELS[raw] ?? RESOLUTION_LABELS[raw.toLowerCase()] ?? raw;
+}
+
+/**
+ * Extract a clean movie title from a filename by stripping year, resolution, and release tags.
+ * E.g. "Inception.2010.1080p.BluRay.x264" → "Inception"
+ */
+export function parseMovieTitle(baseName: string): string {
+  return baseName
+    .replace(/[._]/g, " ")
+    .replace(/\b(19|20)\d{2}\b.*$/, "")
+    .replace(RELEASE_TAG_RE, "")
+    .trim() || baseName;
+}
+
+/**
  * Parse ROM metadata from a filename.
  * Handles formats like:
  *   Super Mario Bros. (USA) [!].nes
@@ -183,6 +207,8 @@ async function buildMetadata(
   const isMusicPattern = pattern.mediaType === MediaType.MUSIC;
   const isTvPattern = pattern.mediaType === MediaType.JELLYFIN_TV;
   const isRomPattern = pattern.mediaType === MediaType.EMULATION_ROMS;
+  const isMoviePattern = pattern.mediaType === MediaType.JELLYFIN_MOVIE
+    || pattern.mediaType === MediaType.JELLYFIN_MOVIE_VERSION;
 
   const fromTv = isTvPattern ? parseTvPattern(baseName) : {};
   const fromMusic = isMusicPattern ? parseMusicPattern(baseName) : {};
@@ -192,12 +218,15 @@ async function buildMetadata(
   // season/episode extraction (useful for metadata) when not music or ROM
   const fromTvFallback = !isMusicPattern && !isTvPattern && !isRomPattern ? parseTvPattern(baseName) : {};
 
+  // For movie patterns, extract a clean title from the filename
+  const movieTitle = isMoviePattern ? parseMovieTitle(baseName) : undefined;
+
   // Merge: NFO takes precedence, then pattern-appropriate parser
   const merged: FileMetadata = {
     baseName,
     ext,
     originalPath: filePath,
-    title: nfoMeta.title ?? fromTv.title ?? fromRom.title ?? fromTvFallback.title ?? baseName,
+    title: nfoMeta.title ?? fromTv.title ?? fromRom.title ?? movieTitle ?? fromTvFallback.title ?? baseName,
     season: nfoMeta.season ?? fromTv.season ?? fromTvFallback.season,
     episode: nfoMeta.episode ?? fromTv.episode ?? fromTvFallback.episode,
     episodeTitle: nfoMeta.episodeTitle ?? fromTv.episodeTitle ?? fromTvFallback.episodeTitle,
@@ -208,7 +237,8 @@ async function buildMetadata(
     songTitle: fromMusic.songTitle ?? baseName,
     index,
     platform: fromRom.platform,
-    region: fromRom.region
+    region: fromRom.region,
+    resolution: parseResolutionFromFilename(baseName)
   };
 
   return merged;

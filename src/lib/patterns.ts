@@ -13,12 +13,14 @@ import {
   BOOK_EXTENSIONS,
   DOC_EXTENSIONS,
   ROM_EXTENSIONS,
-  PLATFORM_MAP
+  PLATFORM_MAP,
+  RESOLUTION_LABELS
 } from "./config.js";
 
 export enum MediaType {
   JELLYFIN_TV = "jellyfin_tv",
   JELLYFIN_MOVIE = "jellyfin_movie",
+  JELLYFIN_MOVIE_VERSION = "jellyfin_movie_version",
   PHOTOGRAPHY = "photography",
   MUSIC = "music",
   BOOKS = "books",
@@ -63,6 +65,8 @@ export interface FileMetadata {
   platform?: string;
   /** ROM region tag (e.g. "USA", "Japan", "Europe") */
   region?: string;
+  /** Video resolution tag (e.g. "1080p", "4K") for multi-version movies */
+  resolution?: string;
 }
 
 export interface NamingPattern {
@@ -139,6 +143,33 @@ export const jellyfinMoviePattern: NamingPattern = {
 };
 
 // ---------------------------------------------------------------------------
+// Jellyfin Movie Multi-Version Pattern
+// Format: "Movie Title (Year) - [Resolution].ext"
+// Folder:  "Movie Title (Year)/"
+// Jellyfin docs: multiple versions of the same movie stored in one folder.
+//   Movie Title (Year)/Movie Title (Year) - [1080p Bluray].mkv
+//   Movie Title (Year)/Movie Title (Year) - [2160p 4K].mkv
+// ---------------------------------------------------------------------------
+export const jellyfinMovieVersionPattern: NamingPattern = {
+  mediaType: MediaType.JELLYFIN_MOVIE_VERSION,
+  label: "Jellyfin – Movie Multi-Version",
+  extensions: TV_VIDEO_EXTENSIONS,
+  format(meta) {
+    const title = sanitizeFilename(meta.title ?? meta.baseName);
+    const year = meta.year ? ` (${meta.year})` : "";
+    const raw = meta.resolution?.toLowerCase() ?? "";
+    const res = RESOLUTION_LABELS[raw] ?? meta.resolution;
+    const tag = res ? ` - [${res}]` : "";
+    return `${title}${year}${tag}${meta.ext}`;
+  },
+  folderPath(meta) {
+    const title = sanitizeFilename(meta.title ?? meta.baseName);
+    const year = meta.year ? ` (${meta.year})` : "";
+    return `${title}${year}`;
+  }
+};
+
+// ---------------------------------------------------------------------------
 // Photography Pattern
 // Format: "YYYY-MM-DD_Location_001.ext"
 // ---------------------------------------------------------------------------
@@ -155,9 +186,10 @@ export const photographyPattern: NamingPattern = {
 };
 
 // ---------------------------------------------------------------------------
-// Music Pattern
+// Music Pattern (Jellyfin / MusicBrainz-compatible)
 // Format: "01 - Artist - Song Title.ext"
-// Folder:  "Artist/Album/"
+// Folder:  "Artist/Album (Year)/"
+// Jellyfin docs: Artist/Album (Year)/01 - Song Title.ext
 // ---------------------------------------------------------------------------
 export const musicPattern: NamingPattern = {
   mediaType: MediaType.MUSIC,
@@ -172,13 +204,16 @@ export const musicPattern: NamingPattern = {
   folderPath(meta) {
     const artist = sanitizeFilename(meta.artist ?? "Unknown Artist");
     const album = sanitizeFilename(meta.album ?? "Unknown Album");
-    return `${artist}/${album}`;
+    const year = meta.year ? ` (${meta.year})` : "";
+    return `${artist}/${album}${year}`;
   }
 };
 
 // ---------------------------------------------------------------------------
-// Books Pattern
-// Format: "Author - Title.ext"
+// Books Pattern (Jellyfin / Calibre-compatible)
+// Format: "Author - Title (Year).ext"
+// Folder:  "Author/"
+// Jellyfin docs: Author/Title (Year).ext or Author Name/Book Title (Year).epub
 // ---------------------------------------------------------------------------
 export const booksPattern: NamingPattern = {
   mediaType: MediaType.BOOKS,
@@ -187,7 +222,8 @@ export const booksPattern: NamingPattern = {
   format(meta) {
     const author = sanitizeFilename(meta.artist ?? meta.title ?? "Unknown Author");
     const bookTitle = sanitizeFilename(meta.songTitle ?? meta.baseName);
-    return `${author} - ${bookTitle}${meta.ext}`;
+    const year = meta.year ? ` (${meta.year})` : "";
+    return `${author} - ${bookTitle}${year}${meta.ext}`;
   },
   folderPath(meta) {
     return sanitizeFilename(meta.artist ?? "Unknown Author");
@@ -233,6 +269,7 @@ export const emulationRomsPattern: NamingPattern = {
 export const ALL_PATTERNS: NamingPattern[] = [
   jellyfinTvPattern,
   jellyfinMoviePattern,
+  jellyfinMovieVersionPattern,
   photographyPattern,
   musicPattern,
   booksPattern,
@@ -248,7 +285,8 @@ export function getPattern(mediaType: MediaType): NamingPattern | undefined {
 // ---------------------------------------------------------------------------
 // Custom Template Pattern
 // Tokens: {title}, {season}, {episode}, {episodeTitle}, {year}, {artist},
-//         {track}, {song}, {date}, {location}, {index}, {ext}, {baseName}
+//         {track}, {song}, {date}, {location}, {index}, {ext}, {baseName},
+//         {platform}, {region}, {resolution}, {album}
 // ---------------------------------------------------------------------------
 
 /**
@@ -273,6 +311,8 @@ export function applyTemplate(template: string, meta: FileMetadata): string {
       case "baseName":     return sanitizeFilename(meta.baseName);
       case "platform":     return meta.platform ? sanitizeFilename(meta.platform) : "";
       case "region":       return meta.region ? sanitizeFilename(meta.region) : "";
+      case "resolution":   return meta.resolution ?? "";
+      case "album":        return meta.album ? sanitizeFilename(meta.album) : "";
       default:             return `{${token}}`;
     }
   });

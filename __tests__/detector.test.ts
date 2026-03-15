@@ -119,4 +119,17 @@ describe("detectMediaType", () => {
     const result = await detectMediaType(tmpDir);
     expect(result.mediaType).toBe(MediaType.EMULATION_ROMS);
   });
+
+  it("detects movie multi-version when multiple resolution-tagged videos exist", async () => {
+    touch(tmpDir, "Inception.2010.1080p.BluRay.mkv");
+    touch(tmpDir, "Inception.2010.2160p.WEB-DL.mkv");
+    const result = await detectMediaType(tmpDir);
+    expect(result.mediaType).toBe(MediaType.JELLYFIN_MOVIE_VERSION);
+  });
+
+  it("detects single movie (not multi-version) when only one resolution tag", async () => {
+    touch(tmpDir, "Inception.2010.1080p.mkv");
+    const result = await detectMediaType(tmpDir);
+    expect(result.mediaType).toBe(MediaType.JELLYFIN_MOVIE);
+  });
 });

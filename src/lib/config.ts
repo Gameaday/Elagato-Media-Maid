@@ -120,6 +120,23 @@ export const ROM_EXTS = new Set([
 export const RELEASE_TAG_RE = /\b(720p|1080p|2160p|4K|BluRay|WEB-?DL|HDTV|x264|x265|HEVC|AAC|DTS)\b.*/i;
 
 /**
+ * Regex to extract resolution from a filename (e.g. "1080p", "2160p", "4K", "720p").
+ * Captures the resolution token itself.
+ */
+export const RESOLUTION_RE = /\b(720p|1080p|2160p|4K|480p|576p)\b/i;
+
+/** Human-readable labels for common resolutions (Jellyfin multi-version convention) */
+export const RESOLUTION_LABELS: Record<string, string> = {
+  "480p": "480p",
+  "576p": "576p",
+  "720p": "720p",
+  "1080p": "1080p",
+  "2160p": "4K",
+  "4k": "4K",
+  "4K": "4K"
+};
+
+/**
  * Extensions recognised as TV/movie video files.
  * Excludes legacy/specialised formats (.flv, .mpg, .mpeg, .3gp, .ogv, .vob)
  * that are rarely found in modern TV/movie libraries.

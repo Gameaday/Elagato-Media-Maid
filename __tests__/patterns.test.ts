@@ -7,6 +7,7 @@ import {
   sanitizeFilename,
   jellyfinTvPattern,
   jellyfinMoviePattern,
+  jellyfinMovieVersionPattern,
   photographyPattern,
   musicPattern,
   booksPattern,
@@ -161,6 +162,18 @@ describe("musicPattern", () => {
     };
     expect(musicPattern.folderPath!(meta)).toBe("Pink Floyd/The Wall");
   });
+
+  it("includes album year in folder path when available", () => {
+    const meta: FileMetadata = {
+      baseName: "track",
+      ext: ".flac",
+      originalPath: "/music/track.flac",
+      artist: "Pink Floyd",
+      album: "The Wall",
+      year: 1979
+    };
+    expect(musicPattern.folderPath!(meta)).toBe("Pink Floyd/The Wall (1979)");
+  });
 });
 
 describe("booksPattern", () => {
@@ -173,6 +186,18 @@ describe("booksPattern", () => {
       songTitle: "Foundation"
     };
     expect(booksPattern.format(meta)).toBe("Isaac Asimov - Foundation.epub");
+  });
+
+  it("formats with author, title, and year", () => {
+    const meta: FileMetadata = {
+      baseName: "Foundation",
+      ext: ".epub",
+      originalPath: "/books/Foundation.epub",
+      artist: "Isaac Asimov",
+      songTitle: "Foundation",
+      year: 1951
+    };
+    expect(booksPattern.format(meta)).toBe("Isaac Asimov - Foundation (1951).epub");
   });
 });
 
@@ -192,6 +217,7 @@ describe("getPattern", () => {
   it("returns the correct pattern for each MediaType", () => {
     expect(getPattern(MediaType.JELLYFIN_TV)).toBe(jellyfinTvPattern);
     expect(getPattern(MediaType.JELLYFIN_MOVIE)).toBe(jellyfinMoviePattern);
+    expect(getPattern(MediaType.JELLYFIN_MOVIE_VERSION)).toBe(jellyfinMovieVersionPattern);
     expect(getPattern(MediaType.PHOTOGRAPHY)).toBe(photographyPattern);
     expect(getPattern(MediaType.MUSIC)).toBe(musicPattern);
     expect(getPattern(MediaType.BOOKS)).toBe(booksPattern);
@@ -205,8 +231,8 @@ describe("getPattern", () => {
 });
 
 describe("ALL_PATTERNS", () => {
-  it("contains exactly 7 patterns", () => {
-    expect(ALL_PATTERNS).toHaveLength(7);
+  it("contains exactly 8 patterns", () => {
+    expect(ALL_PATTERNS).toHaveLength(8);
   });
 
   it("all patterns have non-empty extension lists", () => {
@@ -442,6 +468,79 @@ describe("emulationRomsPattern", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Jellyfin Movie Multi-Version Pattern
+// ---------------------------------------------------------------------------
+
+describe("jellyfinMovieVersionPattern", () => {
+  it("formats with title, year, and resolution", () => {
+    const meta: FileMetadata = {
+      baseName: "Inception",
+      ext: ".mkv",
+      originalPath: "/movies/Inception.mkv",
+      title: "Inception",
+      year: 2010,
+      resolution: "1080p"
+    };
+    expect(jellyfinMovieVersionPattern.format(meta)).toBe("Inception (2010) - [1080p].mkv");
+  });
+
+  it("normalises 2160p to 4K", () => {
+    const meta: FileMetadata = {
+      baseName: "Inception",
+      ext: ".mkv",
+      originalPath: "/movies/Inception.mkv",
+      title: "Inception",
+      year: 2010,
+      resolution: "2160p"
+    };
+    expect(jellyfinMovieVersionPattern.format(meta)).toBe("Inception (2010) - [4K].mkv");
+  });
+
+  it("omits resolution tag when not provided", () => {
+    const meta: FileMetadata = {
+      baseName: "Inception",
+      ext: ".mkv",
+      originalPath: "/movies/Inception.mkv",
+      title: "Inception",
+      year: 2010
+    };
+    expect(jellyfinMovieVersionPattern.format(meta)).toBe("Inception (2010).mkv");
+  });
+
+  it("omits year when not provided", () => {
+    const meta: FileMetadata = {
+      baseName: "Inception",
+      ext: ".mkv",
+      originalPath: "/movies/Inception.mkv",
+      title: "Inception",
+      resolution: "720p"
+    };
+    expect(jellyfinMovieVersionPattern.format(meta)).toBe("Inception - [720p].mkv");
+  });
+
+  it("generates the correct folder path", () => {
+    const meta: FileMetadata = {
+      baseName: "Inception",
+      ext: ".mkv",
+      originalPath: "/movies/Inception.mkv",
+      title: "Inception",
+      year: 2010,
+      resolution: "1080p"
+    };
+    expect(jellyfinMovieVersionPattern.folderPath!(meta)).toBe("Inception (2010)");
+  });
+
+  it("has mediaType JELLYFIN_MOVIE_VERSION", () => {
+    expect(jellyfinMovieVersionPattern.mediaType).toBe(MediaType.JELLYFIN_MOVIE_VERSION);
+  });
+
+  it("uses TV_VIDEO_EXTENSIONS", () => {
+    expect(jellyfinMovieVersionPattern.extensions).toContain(".mkv");
+    expect(jellyfinMovieVersionPattern.extensions).toContain(".mp4");
+  });
+});
+
+// ---------------------------------------------------------------------------
 // applyTemplate – platform and region tokens
 // ---------------------------------------------------------------------------
 
@@ -487,5 +586,54 @@ describe("applyTemplate – ROM tokens", () => {
     };
     const result = applyTemplate("{region}{ext}", meta);
     expect(result).toBe(".nes");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyTemplate – resolution and album tokens
+// ---------------------------------------------------------------------------
+
+describe("applyTemplate – resolution and album tokens", () => {
+  it("replaces {resolution} token", () => {
+    const meta: FileMetadata = {
+      baseName: "movie",
+      ext: ".mkv",
+      originalPath: "/movies/movie.mkv",
+      title: "Inception",
+      resolution: "1080p"
+    };
+    const result = applyTemplate("{title} - [{resolution}]{ext}", meta);
+    expect(result).toBe("Inception - [1080p].mkv");
+  });
+
+  it("returns empty string for missing resolution", () => {
+    const meta: FileMetadata = {
+      baseName: "movie",
+      ext: ".mkv",
+      originalPath: "/movies/movie.mkv"
+    };
+    const result = applyTemplate("{resolution}{ext}", meta);
+    expect(result).toBe(".mkv");
+  });
+
+  it("replaces {album} token", () => {
+    const meta: FileMetadata = {
+      baseName: "track",
+      ext: ".flac",
+      originalPath: "/music/track.flac",
+      album: "The Wall"
+    };
+    const result = applyTemplate("{album}{ext}", meta);
+    expect(result).toBe("The Wall.flac");
+  });
+
+  it("returns empty string for missing album", () => {
+    const meta: FileMetadata = {
+      baseName: "track",
+      ext: ".flac",
+      originalPath: "/music/track.flac"
+    };
+    const result = applyTemplate("{album}{ext}", meta);
+    expect(result).toBe(".flac");
   });
 });
