@@ -86,7 +86,13 @@ export async function fetchJson(
   timeoutMs = 8_000
 ): Promise<unknown> {
   return new Promise((resolve) => {
-    const parsedUrl = new URL(url);
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      resolve(null);
+      return;
+    }
     const isHttps = parsedUrl.protocol === "https:";
 
     const opts: RequestOptions = {
@@ -104,9 +110,14 @@ export async function fetchJson(
     const requester = isHttps ? httpsRequest : httpRequest;
 
     const req = requester(opts, (res) => {
-      // Follow one redirect
+      // Follow one redirect — resolve relative Location against original URL
       if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        fetchJson(res.headers.location, headers, timeoutMs).then(resolve);
+        try {
+          const redirectUrl = new URL(res.headers.location, parsedUrl).toString();
+          fetchJson(redirectUrl, headers, timeoutMs).then(resolve);
+        } catch {
+          resolve(null);
+        }
         return;
       }
 

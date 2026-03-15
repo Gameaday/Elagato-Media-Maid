@@ -68,7 +68,7 @@ export const EBOOK_EXTS = new Set([
  * CB7 and CBT (7-zip and tar comic archives) used by Kavita/ComicRack.
  */
 export const COMIC_EXTS = new Set([
-  ".cbz", ".cbr", ".cb7", ".cbt", ".pdf", ".epub"
+  ".cbz", ".cbr", ".cb7", ".cbt"
 ]);
 
 /**

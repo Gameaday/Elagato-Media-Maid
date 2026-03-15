@@ -12,9 +12,9 @@
 
 import { execFile } from "child_process";
 import { createWriteStream } from "fs";
-import { readdir, stat, rename } from "fs/promises";
+import { readdir, stat } from "fs/promises";
 import { join, extname, basename, dirname } from "path";
-import { createDeflate } from "zlib";
+import { createGzip } from "zlib";
 import { pipeline } from "stream/promises";
 import { createReadStream } from "fs";
 import { logOperation } from "./logger.js";
@@ -195,9 +195,8 @@ export async function estimateRomCompression(
  * Compress cartridge-based ROM files individually into .zip archives.
  * Each ROM file becomes "filename.zip" containing the original file.
  *
- * Uses Node.js zlib deflate for portability (no external tools needed).
- * The output is a raw deflate stream with .zip extension — for full zip
- * archive support with directories, external 7z/zip tool is preferred.
+ * Prefers the external `7z` tool for proper ZIP archive creation.
+ * Falls back to Node.js gzip (.gz) if 7z is not available.
  *
  * @param folderPath - Directory containing ROM files
  * @param dryRun     - If true, estimates only, no actual compression
@@ -217,10 +216,15 @@ export async function compressRoms(
 
   const { compressible, discBased } = await classifyRomFiles(folderPath);
 
+  // Detect 7z availability once for proper ZIP creation
+  const sevenZip = await detectTool("7z");
+  const useZip = sevenZip.available;
+
   // Process compressible cartridge ROMs
   for (const name of compressible) {
     const fromPath = join(folderPath, name);
-    const toPath = join(folderPath, `${basename(name, extname(name))}.zip`);
+    const outExt = useZip ? ".zip" : ".gz";
+    const toPath = join(folderPath, `${basename(name, extname(name))}${outExt}`);
 
     let originalSize: number;
     try {
@@ -232,7 +236,7 @@ export async function compressRoms(
       continue;
     }
 
-    // Skip if zip already exists
+    // Skip if compressed file already exists
     try {
       await stat(toPath);
       result.operations.push({
@@ -243,7 +247,7 @@ export async function compressRoms(
       result.skipped++;
       continue;
     } catch {
-      // Expected — zip doesn't exist yet
+      // Expected — compressed file doesn't exist yet
     }
 
     if (dryRun) {
@@ -258,11 +262,21 @@ export async function compressRoms(
       logOperation({ operation: "dryrun", from: fromPath, to: toPath, message: `DRY RUN – would compress (est. ${Math.round((1 - estimatedSize / originalSize) * 100)}% savings)` });
     } else {
       try {
-        const readStream = createReadStream(fromPath);
-        const deflateStream = createDeflate({ level: 6 });
-        const writeStream = createWriteStream(toPath);
-
-        await pipeline(readStream, deflateStream, writeStream);
+        if (useZip) {
+          // Use 7z for proper ZIP archive creation
+          await new Promise<void>((resolve, reject) => {
+            execFile("7z", ["a", "-tzip", toPath, fromPath], { timeout: 60_000 }, (err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+        } else {
+          // Fall back to gzip (produces .gz, not .zip)
+          const readStream = createReadStream(fromPath);
+          const gzipStream = createGzip({ level: 6 });
+          const writeStream = createWriteStream(toPath);
+          await pipeline(readStream, gzipStream, writeStream);
+        }
 
         const compressedStat = await stat(toPath);
         const compressedSize = compressedStat.size;

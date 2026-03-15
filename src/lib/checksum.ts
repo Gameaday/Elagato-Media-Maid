@@ -15,7 +15,7 @@
 import { createHash } from "crypto";
 import { createReadStream } from "fs";
 import { readdir, stat, readFile, writeFile } from "fs/promises";
-import { join, basename } from "path";
+import { join } from "path";
 import { logOperation } from "./logger.js";
 
 /** Default manifest filename */
