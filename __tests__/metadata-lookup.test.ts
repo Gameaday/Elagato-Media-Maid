@@ -457,23 +457,24 @@ describe("enrichMetadata", () => {
       JSON.stringify({ name: "Simpsons Roasting on an Open Fire", season_number: 1, episode_number: 1, air_date: "1989-12-17" })
     ];
 
-    const https = require("https");
-    const origRequest = https.request;
-    https.request = jest.fn((opts: any, cb: any) => {
-      mockResponseData.body = responses[callCount] ?? "{}";
-      callCount++;
-      return origRequest(opts, cb);
-    });
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const https = require("https");
+  const origRequest = https.request;
+  https.request = jest.fn((opts: any, cb: any) => {
+    mockResponseData.body = responses[callCount] ?? "{}";
+    callCount++;
+    return origRequest(opts, cb);
+  });
 
-    const meta = baseMeta({ title: "simpsons", season: 1, episode: 1 });
-    const result = await enrichMetadata(meta, MediaType.JELLYFIN_TV, enabledConfig);
+  const meta = baseMeta({ title: "simpsons", season: 1, episode: 1 });
+  const result = await enrichMetadata(meta, MediaType.JELLYFIN_TV, enabledConfig);
 
-    expect(result.title).toBe("The Simpsons");
-    expect(result.year).toBe(1989);
-    expect(result.episodeTitle).toBe("Simpsons Roasting on an Open Fire");
+  expect(result.title).toBe("The Simpsons");
+  expect(result.year).toBe(1989);
+  expect(result.episodeTitle).toBe("Simpsons Roasting on an Open Fire");
 
-    https.request = origRequest;
-    mockResponseData.body = originalBody;
+  https.request = origRequest;
+  mockResponseData.body = originalBody;
   });
 
   it("enriches movie metadata from TMDB", async () => {
