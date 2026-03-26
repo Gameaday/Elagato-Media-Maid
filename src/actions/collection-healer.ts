@@ -45,6 +45,8 @@ export interface CollectionHealerSettings {
   enableLookup: boolean;
   /** TMDB API key for TV/Movie/Anime lookups */
   tmdbApiKey: string;
+  /** Whether to organize files into structured folders */
+  createFolderStructure: boolean;
 }
 
 const HEAL_RESET_MS = 8_000;
@@ -129,7 +131,8 @@ export class CollectionHealerAction extends SingletonAction<CollectionHealerSett
         collectionPath: "",
         targetType: "auto",
         enableLookup: false,
-        tmdbApiKey: ""
+        tmdbApiKey: "",
+        createFolderStructure: false
       });
     }
     if (ev.action.isKey() || ev.action.isDial()) {
@@ -257,7 +260,13 @@ export class CollectionHealerAction extends SingletonAction<CollectionHealerSett
 
       const targetType = this.resolveTargetType(settings);
       const lookupConfig = this.buildLookupConfig(settings);
-      const result = await healCollection(settings.collectionPath, dryRun, targetType, lookupConfig);
+      const result = await healCollection(
+        settings.collectionPath,
+        dryRun,
+        targetType,
+        lookupConfig,
+        settings.createFolderStructure || false
+      );
 
       // Also diagnose for browsable results
       const diag = await diagnoseCollection(settings.collectionPath);

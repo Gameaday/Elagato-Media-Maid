@@ -52,6 +52,14 @@
       </select>
     </div>
 
+    <div class="sdpi-item">
+      <label class="sdpi-item-check">
+        <input type="checkbox" id="createFolderStructure">
+        Organize into folders (Season/Artist folders)
+      </label>
+      <div class="sdpi-info">Supported for TV, Anime, Music, and Emulation ROMs. Moves healed files into a structured hierarchy based on their metadata.</div>
+    </div>
+
     <!-- Advanced settings -->
     <details class="sdpi-collapse">
       <summary class="sdpi-collapse-header">Internet Metadata Lookup</summary>
@@ -109,6 +117,7 @@
     var enableLookupEl   = document.getElementById("enableLookup");
     var tmdbKeyGroupEl   = document.getElementById("tmdbKeyGroup");
     var tmdbApiKeyEl     = document.getElementById("tmdbApiKey");
+    var createFolderStructureEl = document.getElementById("createFolderStructure");
 
     function updateLookupVisibility() {
       tmdbKeyGroupEl.style.display = enableLookupEl.checked ? "" : "none";
@@ -119,7 +128,8 @@
         collectionPath: collectionPathEl.value.trim(),
         targetType:     targetTypeEl.value,
         enableLookup:   enableLookupEl.checked,
-        tmdbApiKey:     tmdbApiKeyEl.value.trim()
+        tmdbApiKey:     tmdbApiKeyEl.value.trim(),
+        createFolderStructure: createFolderStructureEl.checked
       };
     }
 
@@ -128,6 +138,7 @@
       if (s.targetType !== undefined) targetTypeEl.value = s.targetType;
       if (s.enableLookup !== undefined) enableLookupEl.checked = s.enableLookup;
       if (s.tmdbApiKey !== undefined) tmdbApiKeyEl.value = s.tmdbApiKey;
+      if (s.createFolderStructure !== undefined) createFolderStructureEl.checked = s.createFolderStructure;
       validatePath(collectionPathEl, pathStatusEl, "Ready to diagnose and heal.");
       updateLookupVisibility();
     }
@@ -140,6 +151,7 @@
       targetTypeEl.addEventListener("change", function () { saveSettings(gatherSettings()); });
       enableLookupEl.addEventListener("change", function () { updateLookupVisibility(); saveSettings(gatherSettings()); });
       tmdbApiKeyEl.addEventListener("input", function () { saveSettings(gatherSettings()); });
+      createFolderStructureEl.addEventListener("change", function () { saveSettings(gatherSettings()); });
     }
   </script>
 </body>

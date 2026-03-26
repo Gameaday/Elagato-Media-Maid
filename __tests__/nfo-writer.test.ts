@@ -26,7 +26,7 @@ afterEach(() => {
 
 describe("getNfoTemplate", () => {
   it("returns fields for all NFO types", () => {
-    const types = getNfoTypes();
+    const types: NfoType[] = getNfoTypes() as NfoType[];
     expect(types).toContain("tvshow");
     expect(types).toContain("episode");
     expect(types).toContain("movie");

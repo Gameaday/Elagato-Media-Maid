@@ -13,7 +13,7 @@ import { readdir, stat, rename, mkdir } from "fs/promises";
 import { join, extname, basename, dirname } from "path";
 import { detectMediaType } from "./detector.js";
 import { getPattern } from "./patterns.js";
-import type { NamingPattern, FileMetadata } from "./patterns.js";
+import type { FileMetadata } from "./patterns.js";
 import { MediaType } from "./patterns.js";
 import {
   parseTvPattern,
@@ -69,7 +69,9 @@ export type IssueKind =
   | "missing_episode_gap"
   | "lower_quality"
   | "inconsistent_naming_scheme"
-  | "duplicate_episode";
+  | "duplicate_episode"
+  | "wrong_platform_folder"
+  | "mangled_metadata";
 
 export interface FileIssue {
   /** Full path to the file */
@@ -245,7 +247,7 @@ export function findCommonPrefix(names: string[]): string {
   }
 
   // Trim trailing whitespace, dots, dashes, underscores
-  prefix = prefix.replace(/[\s._\-]+$/, "");
+  prefix = prefix.replace(/[\s._-]+$/, "");
 
   // Only return if it's meaningful (at least 3 chars)
   return prefix.length >= 3 ? prefix : "";
@@ -365,7 +367,19 @@ export function diagnoseFile(
           description: "Video file in TV/anime collection has no episode numbering (SxxExx or absolute)"
         });
       }
+    } else {
+      // It has season/episode, but if there are other episode patterns, they might be mangled
+      if (TV_EPISODE_RE.test(baseName) && (!tvMeta.season || !tvMeta.episode)) {
+        issues.push({
+          filePath,
+          currentName: fileName,
+          kind: "mangled_metadata",
+          severity: "warning",
+          description: "Video file has unparseable episode numbering in its filename"
+        });
+      }
     }
+
     if (tvMeta.season === undefined && context?.season === undefined) {
       issues.push({
         filePath,
@@ -402,6 +416,16 @@ export function diagnoseFile(
           description: "Multi-version movie file has no resolution tag (720p, 1080p, 4K)"
         });
       }
+    } else if (RESOLUTION_RE.test(baseName)) {
+      // It's a regular movie but has a resolution tag -> could be mangled metadata
+      // Or might be intended for multi-version
+      issues.push({
+        filePath,
+        currentName: fileName,
+        kind: "mangled_metadata",
+        severity: "info",
+        description: "Movie file has a resolution tag but is not in a multi-version collection"
+      });
     }
   }
 
@@ -493,6 +517,17 @@ export function diagnoseFile(
         kind: "missing_title",
         severity: "info",
         description: "ROM file has no region tag (e.g. USA, Europe, Japan)"
+      });
+    }
+
+    const platform = PLATFORM_MAP[ext];
+    if (platform && context?.title && !context.title.includes(platform)) {
+      issues.push({
+        filePath,
+        currentName: fileName,
+        kind: "wrong_platform_folder",
+        severity: "warning",
+        description: `ROM file is for ${platform} but folder context suggests it might be in the wrong place`
       });
     }
   }
@@ -1201,7 +1236,8 @@ export async function healCollection(
   collectionPath: string,
   dryRun = false,
   targetType?: MediaType,
-  lookupConfig?: LookupConfig
+  lookupConfig?: LookupConfig,
+  createFolderStructure = false
 ): Promise<HealResult> {
   const result: HealResult = {
     filesExamined: 0,
@@ -1242,6 +1278,7 @@ export async function healCollection(
   const undoOps: FileOperation[] = [];
   const contextCache = new Map<string, FolderContext>();
   const existingPaths = new Set(allFiles);
+  const createdDirs = new Set<string>();
 
   for (const filePath of allFiles) {
     const ext = extname(filePath).toLowerCase();
@@ -1275,36 +1312,85 @@ export async function healCollection(
       continue;
     }
 
-    const newPath = join(dir, healedName);
+    let targetDir = dir;
+    let newPath = join(targetDir, healedName);
+
+    if (createFolderStructure && pattern.folderPath) {
+      const extStr = extname(filePath).toLowerCase();
+      const baseStr = basename(filePath, extStr);
+      const metaObj: FileMetadata = { baseName: baseStr, ext: extStr, originalPath: filePath };
+
+      if (mediaType === MediaType.JELLYFIN_TV) {
+        Object.assign(metaObj, parseTvPattern(baseStr));
+        if (context.title) metaObj.title = context.title;
+        if (context.season !== undefined) metaObj.season = context.season;
+        if (!metaObj.year && context.year) metaObj.year = context.year;
+      } else if (mediaType === MediaType.MUSIC) {
+        Object.assign(metaObj, parseMusicPattern(baseStr));
+        if (context.title) metaObj.artist = context.title;
+        if (!metaObj.year && context.year) metaObj.year = context.year;
+      }
+      if (!metaObj.title) metaObj.title = baseStr;
+
+      try {
+        const nfoMeta = await findAndParseNfo(filePath);
+        if (nfoMeta.title) metaObj.title = nfoMeta.title;
+        if (nfoMeta.season !== undefined) metaObj.season = nfoMeta.season;
+      } catch {
+        // ignore nfo errors
+      }
+
+      const subFolder = pattern.folderPath(metaObj);
+      targetDir = join(collectionPath, subFolder);
+      newPath = join(targetDir, healedName);
+    }
+
+    let finalPath = newPath;
+    if (existingPaths.has(finalPath) && finalPath !== filePath) {
+      const e = extname(finalPath);
+      const base = finalPath.slice(0, -e.length);
+      let counter = 2;
+      while (existingPaths.has(`${base} (${counter})${e}`)) {
+        counter++;
+      }
+      finalPath = `${base} (${counter})${e}`;
+    }
 
     if (dryRun) {
       logOperation({
         operation: "dryrun",
         from: filePath,
-        to: newPath,
-        message: `DRY RUN – would heal: "${basename(filePath)}" → "${healedName}"`
+        to: finalPath,
+        message: `DRY RUN – would heal: "${basename(filePath)}" → "${basename(finalPath)}"${createFolderStructure && targetDir !== dir ? ` (in ${targetDir})` : ''}`
       });
       result.wouldHeal++;
     } else {
       try {
-        // Deconflict if target already exists
-        let finalPath = newPath;
-        if (existingPaths.has(finalPath) && finalPath !== filePath) {
-          const base = finalPath.slice(0, -ext.length);
-          let counter = 2;
-          while (existingPaths.has(`${base} (${counter})${ext}`)) {
-            counter++;
+        if (createFolderStructure && targetDir !== dir) {
+          try {
+            const dirStat = await stat(targetDir);
+            if (!dirStat.isDirectory()) {
+              await mkdir(targetDir, { recursive: true });
+            }
+          } catch {
+            await mkdir(targetDir, { recursive: true });
+            if (!createdDirs.has(targetDir)) {
+              undoOps.push({ type: "mkdir", from: "", to: targetDir });
+              createdDirs.add(targetDir);
+            }
           }
-          finalPath = `${base} (${counter})${ext}`;
         }
 
         await rename(filePath, finalPath);
         existingPaths.delete(filePath);
         existingPaths.add(finalPath);
-        undoOps.push({ type: "rename", from: filePath, to: finalPath });
+
+        const opType = targetDir !== dir ? "move" : "rename";
+        undoOps.push({ type: opType, from: filePath, to: finalPath });
         result.healed++;
+
         logOperation({
-          operation: "rename",
+          operation: opType,
           from: filePath,
           to: finalPath,
           message: `Healed: "${basename(filePath)}" → "${basename(finalPath)}"`

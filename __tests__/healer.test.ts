@@ -658,6 +658,29 @@ describe("buildHealedName", () => {
 // ── healCollection ─────────────────────────────────────────────────
 
 describe("healCollection", () => {
+  it("organizes files into folders when requested", async () => {
+    createTestFiles({
+      "Show.S01E01.Pilot.mkv": "a",
+      "Show.S01E02.mkv": "b"
+    });
+
+    // Provide a folder context so the title is extracted correctly for the JELLYFIN_TV pattern
+    // The healCollection uses context from the parent directory.
+    // To make this work smoothly, let's create them inside a folder inside TEST_ROOT
+    createTestFiles({
+      "Some Series/Some Series.S01E01.Pilot.mkv": "a",
+      "Some Series/Some Series.S01E02.mkv": "b"
+    });
+
+    const result = await healCollection(join(TEST_ROOT, "Some Series"), false, MediaType.JELLYFIN_TV, undefined, true);
+    expect(result.healed).toBe(2);
+    expect(Object.keys(result.errors).length).toBe(0);
+
+    // The files should be moved to "Some Series/Season 01/" inside the collection path.
+    expect(existsSync(join(TEST_ROOT, "Some Series", "Some Series", "Season 01", "Some Series - S01E01 - Pilot.mkv"))).toBe(true);
+    expect(existsSync(join(TEST_ROOT, "Some Series", "Some Series", "Season 01", "Some Series - S01E02.mkv"))).toBe(true);
+  });
+
   it("returns clean result for an empty directory", async () => {
     const result = await healCollection(TEST_ROOT, true);
     expect(result.filesExamined).toBe(0);

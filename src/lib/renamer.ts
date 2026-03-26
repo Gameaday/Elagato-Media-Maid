@@ -28,7 +28,7 @@ function folderMeta(folderName: string): { title?: string; year?: number; season
     return result;
   }
 
-  const titleYear = /^(.+?)\s*[\(\[]?((?:19|20)\d{2})[\)\]]?\s*$/.exec(folderName);
+  const titleYear = /^(.+?)\s*[([]?((?:19|20)\d{2})[)\]]?\s*$/.exec(folderName);
   if (titleYear) {
     result.title = titleYear[1].replace(/[_.-]+$/, "").trim();
     result.year = parseInt(titleYear[2], 10);
@@ -277,7 +277,7 @@ export function parseYoutubePattern(baseName: string): Partial<FileMetadata> {
   }
 
   // Remove the video ID bracket from the title
-  let cleaned = baseName.replace(YOUTUBE_ID_RE, "").trim();
+  const cleaned = baseName.replace(YOUTUBE_ID_RE, "").trim();
 
   // Try to extract uploader/channel from "Channel - Title" format
   const channelMatch = /^(.+?)\s*-\s+(.+)$/.exec(cleaned);
@@ -413,7 +413,7 @@ export function parseComicPattern(baseName: string): Partial<FileMetadata> {
   }
 
   // Extract title: everything before the first vol/chapter/issue marker
-  let title = baseName
+  const title = baseName
     .replace(COMIC_VOLUME_RE, "")
     .replace(COMIC_CHAPTER_RE, "")
     .replace(/#\d+/, "")
