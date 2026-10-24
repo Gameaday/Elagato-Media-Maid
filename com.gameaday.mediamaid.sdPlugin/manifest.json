@@ -183,6 +183,6 @@
     { "Platform": "mac", "MinimumVersion": "10.15" },
     { "Platform": "windows", "MinimumVersion": "10" }
   ],
-  "Nodejs": { "Version": "20", "Debug": "enabled" },
+  "Nodejs": { "Version": "20", "Debug": "disabled" },
   "URL": "https://github.com/Gameaday/Elagato-Media-Maid"
 }
