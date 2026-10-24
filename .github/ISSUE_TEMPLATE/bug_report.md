@@ -7,7 +7,7 @@ assignees: ''
 ---
 
 **Which action?**
-Smart Fix / Quick Rename / Nuke Downloads / Collection Healer / Deep Scan / Undo / Library Stats / NFO Editor
+Smart Fix / Quick Rename / Sort Downloads / Collection Healer / Deep Scan / Undo / Library Stats / NFO Editor
 
 **What happened?**
 A clear description of the broken behavior.

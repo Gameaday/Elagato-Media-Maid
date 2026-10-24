@@ -1,5 +1,5 @@
 /**
- * Downloads folder organizer for MediaMaid ("Nuke Downloads").
+ * Downloads folder organizer for MediaMaid ("Sort Downloads").
  *
  * Sorts files in a flat folder into categorized subfolders based on their
  * file extension. Uses the centralized extension registry from config.ts.
@@ -148,7 +148,7 @@ export async function sortFolder(
   }
 
   if (!dryRun && undoOps.length > 0) {
-    pushUndoSnapshot(createSnapshot("Nuke Downloads – Sort by Type", undoOps));
+    pushUndoSnapshot(createSnapshot("Sort Downloads – Sort by Type", undoOps));
   }
 
   return result;

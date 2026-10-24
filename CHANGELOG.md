@@ -2,6 +2,16 @@
 
 All notable changes to MediaMaid will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- Renamed "Nuke Downloads" action to "Sort Downloads" ahead of Marketplace submission (#6).
+  - Action UUID: `com.gameaday.mediamaid.nukedownloads` -> `com.gameaday.mediamaid.sortdownloads` (pre-release, no installed users affected).
+  - PI page: `ui/nukedownloads.html` -> `ui/sortdownloads.html`; layout: `layouts/nuke-status.json` -> `layouts/sort-status.json` (layout id `com.gameaday.mediamaid.layout.sort-status`).
+  - Internal renames: `NukeDownloadsAction` -> `SortDownloadsAction`, `NukeDownloadsSettings` -> `SortDownloadsSettings`.
+  - No logic changes.
+
 ## [1.1.0] — 2026-10-24
 
 ### Fixed

@@ -34,9 +34,9 @@ A single button that detects the dominant media type in a folder and applies the
 - Works with the same optional folder-structure creation as Quick Rename
 
 ### ↩️ Undo
-Reverts the most recent MediaMaid operation — rename, Smart Fix, or Nuke Downloads — restoring every file to its original name and location. The button title shows how many undo steps are available (up to 10).
+Reverts the most recent MediaMaid operation — rename, Smart Fix, or Sort Downloads — restoring every file to its original name and location. The button title shows how many undo steps are available (up to 10).
 
-### 💣 Nuke Downloads
+### 🧹 Sort Downloads
 Sorts all loose files in a folder into categorised subfolders in one press:
 
 | Subfolder | Extensions |
@@ -101,7 +101,7 @@ npm run lint    # lint TypeScript
 | **Quick Rename** | Folder path, Naming standard, Create folder structure |
 | **Smart Fix** | Folder path, Minimum confidence %, Create folder structure |
 | **Undo** | *(no settings — operates on the global undo stack)* |
-| **Nuke Downloads** | Folder path, Create "Other" folder |
+| **Sort Downloads** | Folder path, Create "Other" folder |
 
 ### Dry-run / preview
 
@@ -126,12 +126,12 @@ src/
     quick-rename.ts          Quick Rename action
     smart-fix.ts             Smart Fix action
     undo-action.ts           Undo action
-    nuke-downloads.ts        Nuke Downloads action
+    sort-downloads.ts        Sort Downloads action
   lib/
     patterns.ts              Naming pattern definitions & formatter functions
     renamer.ts               Rename engine (filename parsing, deconfliction, dry-run)
     detector.ts              Heuristic media-type detector
-    organizer.ts             Sort-by-type engine (Nuke Downloads)
+    organizer.ts             Sort-by-type engine (Sort Downloads)
     undo-manager.ts          Undo stack (push / pop / apply)
     nfo-parser.ts            NFO XML sidecar parser (Jellyfin/Kodi metadata)
     logger.ts                Append-only operation log
@@ -140,7 +140,7 @@ com.gameaday.mediamaid.sdPlugin/
   ui/
     quickrename.html         Property Inspector – Quick Rename
     smartfix.html            Property Inspector – Smart Fix
-    nukedownloads.html       Property Inspector – Nuke Downloads
+    sortdownloads.html       Property Inspector – Sort Downloads
     undo.html                Property Inspector – Undo
 ```
 

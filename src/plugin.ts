@@ -10,7 +10,7 @@ import streamDeck from "@elgato/streamdeck";
 import { QuickRenameAction } from "./actions/quick-rename.js";
 import { SmartFixAction } from "./actions/smart-fix.js";
 import { UndoAction } from "./actions/undo-action.js";
-import { NukeDownloadsAction } from "./actions/nuke-downloads.js";
+import { SortDownloadsAction } from "./actions/sort-downloads.js";
 import { DeepScanAction } from "./actions/deep-scan.js";
 import { CollectionHealerAction } from "./actions/collection-healer.js";
 import { NfoEditorAction } from "./actions/nfo-editor.js";
@@ -22,7 +22,7 @@ streamDeck.logger.setLevel("info");
 streamDeck.actions.registerAction(new QuickRenameAction());
 streamDeck.actions.registerAction(new SmartFixAction());
 streamDeck.actions.registerAction(new UndoAction());
-streamDeck.actions.registerAction(new NukeDownloadsAction());
+streamDeck.actions.registerAction(new SortDownloadsAction());
 streamDeck.actions.registerAction(new DeepScanAction());
 streamDeck.actions.registerAction(new CollectionHealerAction());
 

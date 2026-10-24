@@ -55,25 +55,25 @@
     },
     {
       "Icon": "imgs/actions/nukedownloads/icon",
-      "Name": "Nuke Downloads",
+      "Name": "Sort Downloads",
       "Controllers": ["Keypad", "Encoder"],
       "Encoder": {
-        "layout": "layouts/nuke-status.json",
+        "layout": "layouts/sort-status.json",
         "TriggerDescription": {
           "Rotate": "Browse categories",
           "Push": "Sort files",
           "Touch": "Dry-run preview"
         }
       },
-      "PropertyInspectorPath": "ui/nukedownloads.html",
+      "PropertyInspectorPath": "ui/sortdownloads.html",
       "States": [
-        { "Image": "imgs/actions/nukedownloads/key", "Title": "Nuke\nDownloads" },
+        { "Image": "imgs/actions/nukedownloads/key", "Title": "Sort\nDownloads" },
         { "Image": "imgs/actions/nukedownloads/key-active", "Title": "Sorting…" }
       ],
       "DisableAutomaticStates": true,
       "SupportedInMultiActions": true,
       "Tooltip": "Instantly sort a messy Downloads folder into organized subfolders: Images, Videos, Audio, Documents, eBooks, Comics, ROMs, Archives, and more.",
-      "UUID": "com.gameaday.mediamaid.nukedownloads"
+      "UUID": "com.gameaday.mediamaid.sortdownloads"
     },
     {
       "Icon": "imgs/actions/healer/icon",
