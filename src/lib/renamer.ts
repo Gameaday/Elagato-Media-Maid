@@ -638,7 +638,20 @@ export async function renameFolder(
 
     const newName = pattern.format(meta);
     let toPath = join(folderPath, newName);
-    toPath = await deconflict(toPath, existingPaths);
+
+    // A proposed path that differs from the source only by letter casing
+    // resolves to the same file on case-insensitive filesystems (Windows,
+    // macOS). That rename is a safe in-place case fix, but deconflict()
+    // would see the source file itself as a collision and rename the
+    // result to "name (2).ext". Skip deconflict for that case — unless
+    // the exact target path is genuinely taken (possible on case-sensitive
+    // filesystems such as Linux).
+    const isCaseOnlyRename =
+      toPath !== fromPath &&
+      toPath.toLowerCase() === fromPath.toLowerCase();
+    if (!isCaseOnlyRename || existingPaths.has(toPath)) {
+      toPath = await deconflict(toPath, existingPaths);
+    }
 
     const op: RenameOperation = {
       from: fromPath,
@@ -745,7 +758,19 @@ export async function organizeWithFolderStructure(
     const newName = pattern.format(meta);
     const subFolder = pattern.folderPath!(meta);
     const targetDir = join(libraryRoot, subFolder);
-    const toPath = join(targetDir, newName);
+    let toPath = join(targetDir, newName);
+
+    // fs.rename() silently REPLACES an existing file at the destination on
+    // every platform, which would lose the destination file. Shift to
+    // "name (2).ext" instead — unless the target is the source itself or
+    // differs from it only by letter casing (a safe in-place case fix on
+    // case-insensitive filesystems).
+    const unchangedOrCaseOnly =
+      toPath === fromPath ||
+      toPath.toLowerCase() === fromPath.toLowerCase();
+    if (!unchangedOrCaseOnly) {
+      toPath = await deconflict(toPath, new Set<string>());
+    }
 
     const op: RenameOperation = { from: fromPath, to: toPath, unchanged: fromPath === toPath };
     result.operations.push(op);
