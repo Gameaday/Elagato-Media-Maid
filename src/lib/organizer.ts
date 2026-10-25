@@ -11,6 +11,7 @@ import { join, extname } from "path";
 import { logOperation, flushLog } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
 import { SORT_CATEGORIES, validateFolderPath } from "./config.js";
+import { withFsLock } from "./lock.js";
 
 /**
  * Check if a path exists on the filesystem.
@@ -65,6 +66,19 @@ function findRule(ext: string, rules: SortRule[]): SortRule | undefined {
  * @param createOther - If true, unrecognized files go into "Other".
  */
 export async function sortFolder(
+  folderPath: string,
+  rules: SortRule[] = DEFAULT_SORT_RULES,
+  dryRun = false,
+  createOther = true
+): Promise<OrganizeResult> {
+  return withFsLock(() => sortFolderInner(folderPath, rules, dryRun, createOther));
+}
+
+/**
+ * Unlocked sort implementation — must only be called while already
+ * holding the fs lock (directly or via withFsLock).
+ */
+async function sortFolderInner(
   folderPath: string,
   rules: SortRule[] = DEFAULT_SORT_RULES,
   dryRun = false,
@@ -163,3 +177,4 @@ export async function sortFolder(
   flushLog();
   return result;
 }
+

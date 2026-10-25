@@ -12,6 +12,7 @@ import { join } from "path";
 import { homedir } from "os";
 import { rename, rm, writeFile } from "fs/promises";
 import { MAX_UNDO_SNAPSHOTS } from "./config.js";
+import { withFsLock } from "./lock.js";
 
 export interface FileOperation {
   /** Operation type */
@@ -118,6 +119,14 @@ export function replaceTopSnapshot(snapshot: UndoSnapshot): void {
  * replaceTopSnapshot) or pop the snapshot when everything succeeded.
  */
 export async function applyUndo(snapshot: UndoSnapshot): Promise<string[]> {
+  return withFsLock(() => applyUndoUnlocked(snapshot));
+}
+
+/**
+ * Unlocked undo implementation — must only be called while already
+ * holding the fs lock (directly or via withFsLock).
+ */
+async function applyUndoUnlocked(snapshot: UndoSnapshot): Promise<string[]> {
   const errors: string[] = [];
   const ops = [...snapshot.operations].reverse();
   const failedOps: FileOperation[] = [];
@@ -176,3 +185,4 @@ export function undoStackSize(): number {
 
 // Re-export for test use
 export { loadStack as _loadStack, saveStack as _saveStack };
+

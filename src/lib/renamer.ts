@@ -13,6 +13,7 @@ import { MediaType } from "./patterns.js";
 import { findAndParseNfo } from "./nfo-parser.js";
 import { logOperation, flushLog } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
+import { withFsLock } from "./lock.js";
 import { validateFolderPath, RELEASE_TAG_RE, ROM_TAG_RE, ROM_REGION_RE, PLATFORM_MAP, RESOLUTION_RE, RESOLUTION_LABELS, SOURCE_TAG_RE, SOURCE_LABELS, HDR_TAG_RE, HDR_LABELS, YOUTUBE_ID_RE, ABSOLUTE_EPISODE_RE, COMIC_VOLUME_RE, COMIC_CHAPTER_RE } from "./config.js";
 import { enrichMetadata, type LookupConfig } from "./metadata-lookup.js";
 
@@ -569,6 +570,10 @@ async function deconflict(proposedPath: string, existingFiles: Set<string>): Pro
 /**
  * Apply a naming pattern to all matching files in a folder.
  *
+ * Serialized with every other mutating operation (see lock.ts) so two
+ * actions can never interleave their read → decide → write passes on
+ * the same folder.
+ *
  * @param folderPath    - The directory to operate on.
  * @param pattern       - The naming pattern to apply.
  * @param dryRun        - If true, no files are actually renamed.
@@ -576,6 +581,19 @@ async function deconflict(proposedPath: string, existingFiles: Set<string>): Pro
  * @returns             - Summary of operations performed.
  */
 export async function renameFolder(
+  folderPath: string,
+  pattern: NamingPattern,
+  dryRun = false,
+  lookupConfig?: LookupConfig
+): Promise<RenameResult> {
+  return withFsLock(() => renameFolderInner(folderPath, pattern, dryRun, lookupConfig));
+}
+
+/**
+ * Unlocked rename implementation — must only be called while already
+ * holding the fs lock (directly or via withFsLock).
+ */
+async function renameFolderInner(
   folderPath: string,
   pattern: NamingPattern,
   dryRun = false,
@@ -722,9 +740,26 @@ export async function organizeWithFolderStructure(
   dryRun = false,
   lookupConfig?: LookupConfig
 ): Promise<RenameResult> {
+  // The whole pass — including the flat-rename fallback below — runs under
+  // the fs lock; the fallback must not re-acquire it.
+  return withFsLock(() =>
+    organizeWithFolderStructureInner(libraryRoot, pattern, dryRun, lookupConfig)
+  );
+}
+
+/**
+ * Unlocked organize implementation — must only be called while already
+ * holding the fs lock (directly or via withFsLock).
+ */
+async function organizeWithFolderStructureInner(
+  libraryRoot: string,
+  pattern: NamingPattern,
+  dryRun = false,
+  lookupConfig?: LookupConfig
+): Promise<RenameResult> {
   if (!pattern.folderPath) {
-    // Fall back to flat rename
-    return renameFolder(libraryRoot, pattern, dryRun, lookupConfig);
+    // Fall back to flat rename (already inside the lock)
+    return renameFolderInner(libraryRoot, pattern, dryRun, lookupConfig);
   }
 
   const result: RenameResult = {
@@ -840,3 +875,4 @@ export async function organizeWithFolderStructure(
   flushLog();
   return result;
 }
+
