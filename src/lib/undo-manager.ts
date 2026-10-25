@@ -10,9 +10,10 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, renameSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import { rename, rm, writeFile } from "fs/promises";
+import { rm, writeFile } from "fs/promises";
 import { MAX_UNDO_SNAPSHOTS } from "./config.js";
 import { withFsLock } from "./lock.js";
+import { moveFile } from "./fs-utils.js";
 
 export interface FileOperation {
   /** Operation type */
@@ -154,7 +155,7 @@ async function applyUndoUnlocked(snapshot: UndoSnapshot): Promise<string[]> {
         }
       } else {
         // rename and move are both reversed by renaming back
-        await rename(op.to, op.from);
+        await moveFile(op.to, op.from);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

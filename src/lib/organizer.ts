@@ -5,13 +5,14 @@
  * file extension. Uses the centralized extension registry from config.ts.
  */
 
-import { rename, mkdir, readdir, stat } from "fs/promises";
+import { mkdir, readdir, stat } from "fs/promises";
 import type { Dirent } from "fs";
 import { join, extname } from "path";
 import { logOperation, flushLog } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
 import { SORT_CATEGORIES, validateFolderPath } from "./config.js";
 import { withFsLock } from "./lock.js";
+import { moveFile } from "./fs-utils.js";
 
 /**
  * Check if a path exists on the filesystem.
@@ -155,7 +156,7 @@ async function sortFolderInner(
           undoOps.push({ type: "mkdir", from: "", to: targetDir });
           createdDirs.add(targetDir);
         }
-        await rename(fromPath, toPath);
+        await moveFile(fromPath, toPath);
         undoOps.push({ type: "move", from: fromPath, to: toPath });
         result.totalMoved++;
         logOperation({ operation: "sort", from: fromPath, to: toPath, message: `Sorted into ${targetFolder}` });

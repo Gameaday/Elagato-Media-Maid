@@ -5,7 +5,7 @@
  * Supports dry-run mode (preview only) and returns all operations for undo.
  */
 
-import { rename, mkdir, readdir, stat } from "fs/promises";
+import { mkdir, readdir, stat } from "fs/promises";
 import type { Dirent } from "fs";
 import { join, extname, basename, dirname } from "path";
 import type { NamingPattern, FileMetadata } from "./patterns.js";
@@ -14,6 +14,7 @@ import { findAndParseNfo } from "./nfo-parser.js";
 import { logOperation, flushLog } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
 import { withFsLock } from "./lock.js";
+import { moveFile } from "./fs-utils.js";
 import { validateFolderPath, RELEASE_TAG_RE, ROM_TAG_RE, ROM_REGION_RE, PLATFORM_MAP, RESOLUTION_RE, RESOLUTION_LABELS, SOURCE_TAG_RE, SOURCE_LABELS, HDR_TAG_RE, HDR_LABELS, YOUTUBE_ID_RE, ABSOLUTE_EPISODE_RE, COMIC_VOLUME_RE, COMIC_CHAPTER_RE } from "./config.js";
 import { enrichMetadata, type LookupConfig } from "./metadata-lookup.js";
 
@@ -693,7 +694,7 @@ async function renameFolderInner(
 
     if (!dryRun) {
       try {
-        await rename(fromPath, toPath);
+        await moveFile(fromPath, toPath);
         existingPaths.delete(fromPath);
         existingPaths.add(toPath);
         undoOps.push({ type: "rename", from: fromPath, to: toPath });
@@ -848,7 +849,7 @@ async function organizeWithFolderStructureInner(
           undoOps.push({ type: "mkdir", from: "", to: targetDir });
           createdDirs.add(targetDir);
         }
-        await rename(fromPath, toPath);
+        await moveFile(fromPath, toPath);
         undoOps.push({ type: "move", from: fromPath, to: toPath });
         result.renamed++;
         logOperation({ operation: "move", from: fromPath, to: toPath, message: "OK" });
