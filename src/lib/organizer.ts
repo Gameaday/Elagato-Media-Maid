@@ -6,8 +6,9 @@
  */
 
 import { rename, mkdir, readdir, stat } from "fs/promises";
+import type { Dirent } from "fs";
 import { join, extname } from "path";
-import { logOperation } from "./logger.js";
+import { logOperation, flushLog } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
 import { SORT_CATEGORIES, validateFolderPath } from "./config.js";
 
@@ -82,24 +83,32 @@ export async function sortFolder(
     return result;
   }
 
-  let entries: string[];
+  let entries: Dirent[];
   try {
-    entries = await readdir(folderPath);
+    entries = await readdir(folderPath, { withFileTypes: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     result.errors["[folder]"] = `Could not read folder: ${msg}`;
     return result;
   }
 
-  // Only process files (not subfolders already created)
+  // Only process files (not subfolders already created).
+  // (withFileTypes avoids one stat() call per entry; symlinks are
+  // resolved with stat() to keep the previous stat()-based behaviour.)
   const files: string[] = [];
-  for (const name of entries) {
-    try {
-      const fileStat = await stat(join(folderPath, name));
-      if (fileStat.isFile()) files.push(name);
-    } catch {
-      // skip unreadable entries
+  for (const entry of entries) {
+    if (entry.isDirectory()) continue;
+    if (!entry.isFile() && !entry.isSymbolicLink()) continue;
+    if (!entry.isFile()) {
+      try {
+        const resolved = await stat(join(folderPath, entry.name));
+        if (!resolved.isFile()) continue;
+      } catch {
+        // skip broken/unreadable symlinks
+        continue;
+      }
     }
+    files.push(entry.name);
   }
 
   const undoOps: FileOperation[] = [];
@@ -151,5 +160,6 @@ export async function sortFolder(
     pushUndoSnapshot(createSnapshot("Sort Downloads – Sort by Type", undoOps));
   }
 
+  flushLog();
   return result;
 }
