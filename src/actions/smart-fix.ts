@@ -193,6 +193,10 @@ export class SmartFixAction extends SingletonAction<SmartFixSettings> {
       return;
     }
 
+    // Transient statuses (e.g. "Low Conf.") must survive the finally block
+    // below; their own timer restores the default title.
+    let holdTitleReset = false;
+
     try {
       if (actionObj.isKey() || actionObj.isDial()) {
         await actionObj.setTitle(dryRun ? "Scanning…" : "Fixing…");
@@ -221,6 +225,7 @@ export class SmartFixAction extends SingletonAction<SmartFixSettings> {
         );
         if (actionObj.isKey() || actionObj.isDial()) {
           await actionObj.setTitle("Low Conf.");
+          holdTitleReset = true;
         }
 
         if (actionObj.isDial()) {
@@ -290,9 +295,10 @@ export class SmartFixAction extends SingletonAction<SmartFixSettings> {
       await actionObj.showAlert();
       streamDeck.logger.error("SmartFix fatal error:", err);
     } finally {
-      if (actionObj.isKey() || actionObj.isDial()) {
+      if (!holdTitleReset && (actionObj.isKey() || actionObj.isDial())) {
         await actionObj.setTitle("Smart Fix");
       }
     }
   }
 }
+

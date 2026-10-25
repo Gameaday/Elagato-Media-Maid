@@ -7,11 +7,13 @@
  * The stack is also persisted to disk so it survives plugin restarts.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync, renameSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import { rename, rm, writeFile } from "fs/promises";
+import { rm, writeFile } from "fs/promises";
 import { MAX_UNDO_SNAPSHOTS } from "./config.js";
+import { withFsLock } from "./lock.js";
+import { moveFile } from "./fs-utils.js";
 
 export interface FileOperation {
   /** Operation type */
@@ -54,7 +56,13 @@ function loadStack(): UndoSnapshot[] {
 
 function saveStack(stack: UndoSnapshot[]): void {
   ensureDir();
-  writeFileSync(UNDO_FILE_PATH, JSON.stringify(stack, null, 2), "utf-8");
+  // Atomic write: a crash mid-write must never truncate or corrupt the
+  // undo history (loadStack() would then silently drop every snapshot).
+  // Writing a temp file and renaming it over the target is atomic on
+  // every supported platform.
+  const tmpPath = `${UNDO_FILE_PATH}.tmp`;
+  writeFileSync(tmpPath, JSON.stringify(stack, null, 2), "utf-8");
+  renameSync(tmpPath, UNDO_FILE_PATH);
 }
 
 /**
@@ -89,12 +97,40 @@ export function popUndoSnapshot(): UndoSnapshot | undefined {
 }
 
 /**
+ * Replace the most recent snapshot in place.
+ * Used after a partially failed undo: applyUndo() trims the snapshot to
+ * the operations that could not be reverted, and that remainder must be
+ * persisted so the next Undo press retries only those.
+ */
+export function replaceTopSnapshot(snapshot: UndoSnapshot): void {
+  const stack = loadStack();
+  if (stack.length === 0) return;
+  stack[stack.length - 1] = snapshot;
+  saveStack(stack);
+}
+
+/**
  * Revert all file operations in the snapshot (in reverse order).
  * Returns a list of any errors encountered.
+ *
+ * The snapshot is trimmed down to the operations that could NOT be
+ * reverted, so a subsequent Undo press retries only the remaining
+ * operations instead of re-processing (and re-failing) the ones that
+ * already reverted. Callers must persist that remainder (see
+ * replaceTopSnapshot) or pop the snapshot when everything succeeded.
  */
 export async function applyUndo(snapshot: UndoSnapshot): Promise<string[]> {
+  return withFsLock(() => applyUndoUnlocked(snapshot));
+}
+
+/**
+ * Unlocked undo implementation — must only be called while already
+ * holding the fs lock (directly or via withFsLock).
+ */
+async function applyUndoUnlocked(snapshot: UndoSnapshot): Promise<string[]> {
   const errors: string[] = [];
   const ops = [...snapshot.operations].reverse();
+  const failedOps: FileOperation[] = [];
 
   for (const op of ops) {
     try {
@@ -119,13 +155,17 @@ export async function applyUndo(snapshot: UndoSnapshot): Promise<string[]> {
         }
       } else {
         // rename and move are both reversed by renaming back
-        await rename(op.to, op.from);
+        await moveFile(op.to, op.from);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       errors.push(`Could not revert "${op.to}" → "${op.from}": ${msg}`);
+      failedOps.push(op);
     }
   }
+
+  // Keep the failed operations in their original order.
+  snapshot.operations = failedOps.reverse();
 
   return errors;
 }
@@ -146,3 +186,4 @@ export function undoStackSize(): number {
 
 // Re-export for test use
 export { loadStack as _loadStack, saveStack as _saveStack };
+

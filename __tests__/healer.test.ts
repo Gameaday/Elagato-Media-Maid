@@ -2,7 +2,7 @@
  * Tests for the collection healer module.
  */
 
-import { mkdirSync, writeFileSync, rmSync, existsSync, readdirSync } from "fs";
+import { mkdirSync, writeFileSync, rmSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import {
   diagnoseFile,

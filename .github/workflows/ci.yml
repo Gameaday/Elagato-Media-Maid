@@ -18,6 +18,9 @@ jobs:
           node-version: 20
           cache: npm
 
+      - name: Generate placeholder icons (only if missing)
+        run: node scripts/gen-placeholder-icons.mjs
+
       - name: Install dependencies
         run: npm ci
 
@@ -31,4 +34,22 @@ jobs:
         run: npm run build
 
       - name: Validate plugin bundle
-        run: npm install -g @streamdeck/cli && streamdeck validate com.gameaday.mediamaid.sdPlugin
+        run: |
+          set +e
+          npm install -g @elgato/cli > cli-install.txt 2>&1
+          install_status=$?
+          streamdeck validate com.gameaday.mediamaid.sdPlugin > validate-output.txt 2>&1
+          validate_status=$?
+          if [ "$install_status" -ne 0 ]; then
+            echo "::error title=cli install failed (exit $install_status)::first lines follow"
+            head -n 10 cli-install.txt | while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error title=cli install::${line}"
+            done
+          fi
+          if [ "$validate_status" -ne 0 ]; then
+            echo "::error title=streamdeck validate failed (exit $validate_status)::first lines follow"
+            head -n 10 validate-output.txt | while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error title=streamdeck validate::${line}"
+            done
+          fi
+          exit "$validate_status"
