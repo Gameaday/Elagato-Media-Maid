@@ -6,11 +6,12 @@
  */
 
 import { rename, mkdir, readdir, stat } from "fs/promises";
+import type { Dirent } from "fs";
 import { join, extname, basename, dirname } from "path";
 import type { NamingPattern, FileMetadata } from "./patterns.js";
 import { MediaType } from "./patterns.js";
 import { findAndParseNfo } from "./nfo-parser.js";
-import { logOperation } from "./logger.js";
+import { logOperation, flushLog } from "./logger.js";
 import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
 import { validateFolderPath, RELEASE_TAG_RE, ROM_TAG_RE, ROM_REGION_RE, PLATFORM_MAP, RESOLUTION_RE, RESOLUTION_LABELS, SOURCE_TAG_RE, SOURCE_LABELS, HDR_TAG_RE, HDR_LABELS, YOUTUBE_ID_RE, ABSOLUTE_EPISODE_RE, COMIC_VOLUME_RE, COMIC_CHAPTER_RE } from "./config.js";
 import { enrichMetadata, type LookupConfig } from "./metadata-lookup.js";
@@ -593,32 +594,39 @@ export async function renameFolder(
     return result;
   }
 
-  let entries: string[];
+  let entries: Dirent[];
   try {
-    entries = await readdir(folderPath);
+    entries = await readdir(folderPath, { withFileTypes: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     result.errors["[folder]"] = `Could not read folder: ${msg}`;
     return result;
   }
 
-  // Filter to files matching the pattern's extensions
+  // Filter to files matching the pattern's extensions.
+  // (withFileTypes avoids one stat() call per entry; symlinks are
+  // resolved with stat() to keep the previous stat()-based behaviour.)
   const targetFiles: string[] = [];
-  for (const name of entries) {
-    const ext = extname(name).toLowerCase();
-    try {
-      const fileStat = await stat(join(folderPath, name));
-      if (fileStat.isFile() && pattern.extensions.includes(ext)) {
-        targetFiles.push(name);
+  for (const entry of entries) {
+    if (entry.isDirectory()) continue;
+    if (!entry.isFile() && !entry.isSymbolicLink()) continue;
+    const ext = extname(entry.name).toLowerCase();
+    if (!pattern.extensions.includes(ext)) continue;
+    if (!entry.isFile()) {
+      try {
+        const resolved = await stat(join(folderPath, entry.name));
+        if (!resolved.isFile()) continue;
+      } catch {
+        // skip broken/unreadable symlinks
+        continue;
       }
-    } catch {
-      // skip unreadable entries
     }
+    targetFiles.push(entry.name);
   }
 
   // Build a set of all file paths currently in the folder for deconfliction
   const existingPaths = new Set(
-    entries.map(n => join(folderPath, n))
+    entries.map(e => join(folderPath, e.name))
   );
 
   const undoOps: FileOperation[] = [];
@@ -679,6 +687,14 @@ export async function renameFolder(
         logOperation({ operation: "error", from: fromPath, to: toPath, message: msg });
       }
     } else {
+      // Dry-run: simulate the rename so later files in the batch see the
+      // same set of taken names a real run would produce. Without this,
+      // two files mapping to the same target name are both reported with
+      // the identical name, while a real run deconflicts to "(2)".
+      if (!op.unchanged) {
+        existingPaths.delete(fromPath);
+        existingPaths.add(toPath);
+      }
       logOperation({ operation: "dryrun", from: fromPath, to: toPath, message: "DRY RUN – no change made" });
     }
   }
@@ -687,6 +703,7 @@ export async function renameFolder(
     pushUndoSnapshot(createSnapshot(`Quick Rename – ${pattern.label}`, undoOps));
   }
 
+  flushLog();
   return result;
 }
 
@@ -717,9 +734,9 @@ export async function organizeWithFolderStructure(
     errors: {}
   };
 
-  let entries: string[];
+  let entries: Dirent[];
   try {
-    entries = await readdir(libraryRoot);
+    entries = await readdir(libraryRoot, { withFileTypes: true });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     result.errors["[folder]"] = `Could not read library root: ${msg}`;
@@ -727,20 +744,28 @@ export async function organizeWithFolderStructure(
   }
 
   const targetFiles: string[] = [];
-  for (const name of entries) {
-    const ext = extname(name).toLowerCase();
-    try {
-      const fileStat = await stat(join(libraryRoot, name));
-      if (fileStat.isFile() && pattern.extensions.includes(ext)) {
-        targetFiles.push(name);
+  for (const entry of entries) {
+    if (entry.isDirectory()) continue;
+    if (!entry.isFile() && !entry.isSymbolicLink()) continue;
+    const ext = extname(entry.name).toLowerCase();
+    if (!pattern.extensions.includes(ext)) continue;
+    if (!entry.isFile()) {
+      try {
+        const resolved = await stat(join(libraryRoot, entry.name));
+        if (!resolved.isFile()) continue;
+      } catch {
+        // skip broken/unreadable symlinks
+        continue;
       }
-    } catch {
-      // skip unreadable entries
     }
+    targetFiles.push(entry.name);
   }
 
   const undoOps: FileOperation[] = [];
   const createdDirs = new Set<string>();
+  // Target names already claimed within this batch, so dry-run
+  // deconfliction matches what a real run would produce.
+  const proposedPaths = new Set<string>();
 
   for (let i = 0; i < targetFiles.length; i++) {
     const name = targetFiles[i];
@@ -769,7 +794,7 @@ export async function organizeWithFolderStructure(
       toPath === fromPath ||
       toPath.toLowerCase() === fromPath.toLowerCase();
     if (!unchangedOrCaseOnly) {
-      toPath = await deconflict(toPath, new Set<string>());
+      toPath = await deconflict(toPath, proposedPaths);
     }
 
     const op: RenameOperation = { from: fromPath, to: toPath, unchanged: fromPath === toPath };
@@ -798,6 +823,12 @@ export async function organizeWithFolderStructure(
         logOperation({ operation: "error", from: fromPath, to: toPath, message: msg });
       }
     } else {
+      // Dry-run: record the claimed target so later files in the same
+      // batch collide against it exactly as they would in a real run
+      // (a real run relies on the filesystem, which dry-run cannot).
+      if (!op.unchanged) {
+        proposedPaths.add(toPath);
+      }
       logOperation({ operation: "dryrun", from: fromPath, to: toPath, message: "DRY RUN – no change made" });
     }
   }
@@ -806,5 +837,6 @@ export async function organizeWithFolderStructure(
     pushUndoSnapshot(createSnapshot(`Organize – ${pattern.label}`, undoOps));
   }
 
+  flushLog();
   return result;
 }
