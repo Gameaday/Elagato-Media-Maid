@@ -6,6 +6,7 @@
  */
 
 import { readdir, stat } from "fs/promises";
+import type { Dirent } from "fs";
 import { extname, join } from "path";
 import { MediaType } from "./patterns.js";
 import {
@@ -46,29 +47,37 @@ export interface DetectionResult {
  */
 async function collectExtensions(dir: string, depth = 0, maxDepth = DETECTION_MAX_DEPTH): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
-  let entries: string[];
+  let entries: Dirent[];
   try {
-    entries = await readdir(dir);
+    entries = await readdir(dir, { withFileTypes: true });
   } catch {
     return counts;
   }
 
-  for (const name of entries) {
-    const fullPath = join(dir, name);
-    let fileStat;
-    try {
-      fileStat = await stat(fullPath);
-    } catch {
-      continue;
+  for (const entry of entries) {
+    const fullPath = join(dir, entry.name);
+    let isDir = entry.isDirectory();
+    let isFile = entry.isFile();
+
+    if (!isDir && !isFile && entry.isSymbolicLink()) {
+      // Resolve symlinks the way the previous stat() call did, so
+      // symlinked files and directories are still counted.
+      try {
+        const resolved = await stat(fullPath);
+        isDir = resolved.isDirectory();
+        isFile = resolved.isFile();
+      } catch {
+        continue;
+      }
     }
 
-    if (fileStat.isDirectory() && depth < maxDepth) {
+    if (isDir && depth < maxDepth) {
       const sub = await collectExtensions(fullPath, depth + 1, maxDepth);
       for (const [ext, count] of Object.entries(sub)) {
         counts[ext] = (counts[ext] ?? 0) + count;
       }
-    } else if (fileStat.isFile()) {
-      const ext = extname(name).toLowerCase();
+    } else if (isFile) {
+      const ext = extname(entry.name).toLowerCase();
       if (ext) {
         counts[ext] = (counts[ext] ?? 0) + 1;
       }
