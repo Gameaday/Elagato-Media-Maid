@@ -33,7 +33,7 @@ jobs:
       - name: Validate plugin bundle
         run: |
           set +e
-          npm install -g @streamdeck/cli > cli-install.txt 2>&1
+          npm install -g @elgato/cli > cli-install.txt 2>&1
           install_status=$?
           streamdeck validate com.gameaday.mediamaid.sdPlugin > validate-output.txt 2>&1
           validate_status=$?
