@@ -12,7 +12,7 @@ import streamDeck, {
   type WillAppearEvent
 } from "@elgato/streamdeck";
 
-import { peekUndoSnapshot, popUndoSnapshot, applyUndo, undoStackSize } from "../lib/undo-manager.js";
+import { peekUndoSnapshot, popUndoSnapshot, replaceTopSnapshot, applyUndo, undoStackSize } from "../lib/undo-manager.js";
 import { logOperation } from "../lib/logger.js";
 
 @action({ UUID: "com.gameaday.mediamaid.undo" })
@@ -38,6 +38,16 @@ export class UndoAction extends SingletonAction {
         errors.forEach(e =>
           logOperation({ operation: "error", message: `Undo: ${e}` })
         );
+        // applyUndo() trimmed the snapshot down to the operations that
+        // could not be reverted. Persist that remainder so the next Undo
+        // press retries only what is left — otherwise a single locked
+        // file would block the whole snapshot forever (every press
+        // re-failing on the already-reverted operations).
+        if (snapshot.operations.length > 0) {
+          replaceTopSnapshot(snapshot);
+        } else {
+          popUndoSnapshot();
+        }
       } else {
         // Remove the snapshot only after successful undo
         popUndoSnapshot();
