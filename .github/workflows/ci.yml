@@ -31,4 +31,17 @@ jobs:
         run: npm run build
 
       - name: Validate plugin bundle
-        run: npm install -g @streamdeck/cli && streamdeck validate com.gameaday.mediamaid.sdPlugin
+        run: |
+          npm install -g @streamdeck/cli
+          if streamdeck validate com.gameaday.mediamaid.sdPlugin > validate-output.txt 2>&1; then
+            status=0
+          else
+            status=$?
+          fi
+          {
+            echo "### streamdeck validate output"
+            echo '```'
+            cat validate-output.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit $status
