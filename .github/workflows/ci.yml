@@ -32,17 +32,21 @@ jobs:
 
       - name: Validate plugin bundle
         run: |
-          npm install -g @streamdeck/cli
-          if streamdeck validate com.gameaday.mediamaid.sdPlugin > validate-output.txt 2>&1; then
-            status=0
-          else
-            status=$?
+          set +e
+          npm install -g @streamdeck/cli > cli-install.txt 2>&1
+          install_status=$?
+          streamdeck validate com.gameaday.mediamaid.sdPlugin > validate-output.txt 2>&1
+          validate_status=$?
+          if [ "$install_status" -ne 0 ]; then
+            echo "::error title=cli install failed (exit $install_status)::first lines follow"
+            head -n 10 cli-install.txt | while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error title=cli install::${line}"
+            done
           fi
-          if [ "$status" -ne 0 ]; then
-            while IFS= read -r line; do
-              if [ -n "$line" ]; then
-                echo "::error title=streamdeck validate::${line}"
-              fi
-            done < validate-output.txt
+          if [ "$validate_status" -ne 0 ]; then
+            echo "::error title=streamdeck validate failed (exit $validate_status)::first lines follow"
+            head -n 10 validate-output.txt | while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error title=streamdeck validate::${line}"
+            done
           fi
-          exit $status
+          exit "$validate_status"
