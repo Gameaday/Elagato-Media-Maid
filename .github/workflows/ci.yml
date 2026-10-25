@@ -38,10 +38,11 @@ jobs:
           else
             status=$?
           fi
-          {
-            echo "### streamdeck validate output"
-            echo '```'
-            cat validate-output.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -ne 0 ]; then
+            while IFS= read -r line; do
+              if [ -n "$line" ]; then
+                echo "::error title=streamdeck validate::${line}"
+              fi
+            done < validate-output.txt
+          fi
           exit $status
