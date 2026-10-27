@@ -13,6 +13,11 @@
  *   Push         → auto-detect and apply rename
  *   Touch        → dry-run preview
  *   Long Touch   → rescan folder and show detection result
+ *
+ * Property Inspector (#11):
+ *   The last dry-run preview is persisted by the renamer and can be
+ *   inspected, re-applied, or refreshed from the Smart Fix PI; the PI
+ *   can also open the log folder.
  */
 
 import streamDeck, {
@@ -26,14 +31,18 @@ import streamDeck, {
   type DidReceiveSettingsEvent,
   type DialRotateEvent,
   type DialDownEvent,
-  type TouchTapEvent
+  type TouchTapEvent,
+  type SendToPluginEvent
 } from "@elgato/streamdeck";
 import type { JsonValue } from "@elgato/utils";
+import { exec } from "child_process";
+import { dirname } from "path";
 
 import { detectMediaType } from "../lib/detector.js";
 import { getPattern } from "../lib/patterns.js";
 import { renameFolder, organizeWithFolderStructure } from "../lib/renamer.js";
 import { getLogFilePath } from "../lib/logger.js";
+import { loadLastPreview } from "../lib/preview-store.js";
 import { LONG_PRESS_MS, STATUS_RESET_MS, DEFAULT_MIN_CONFIDENCE } from "../lib/config.js";
 
 export interface SmartFixSettings {
@@ -103,6 +112,84 @@ export class SmartFixAction extends SingletonAction<SmartFixSettings> {
       // Short touch – dry-run preview
       await this.performSmartFix(ev.action, ev.payload.settings, true);
     }
+  }
+
+  // ── Property Inspector messages (#11) ────────────────────────────
+
+  override async onSendToPlugin(ev: SendToPluginEvent<SmartFixSettings>): Promise<void> {
+    const payload = ev.payload as unknown as { event?: string };
+
+    if (payload?.event === "getPreview") {
+      await ev.action.sendToPropertyInspector({
+        event: "preview",
+        preview: loadLastPreview() ?? null
+      } as JsonValue);
+    } else if (payload?.event === "applyPreview") {
+      await this.applyLastPreview(ev.action);
+    } else if (payload?.event === "openLogFolder") {
+      this.openLogFolder();
+    }
+  }
+
+  /**
+   * Apply the most recent dry-run preview for real (#11).
+   * Re-runs the exact pattern/folder the preview was created for, so the
+   * changes the user just inspected are the changes that get applied.
+   */
+  private async applyLastPreview(actionObj: Action<SmartFixSettings>): Promise<void> {
+    const preview = loadLastPreview();
+    if (!preview || preview.changed.length === 0) {
+      await actionObj.showAlert();
+      streamDeck.logger.warn("SmartFix PI: no preview with changes to apply.");
+      return;
+    }
+
+    const pattern = getPattern(preview.mediaType);
+    if (!pattern) {
+      await actionObj.showAlert();
+      streamDeck.logger.warn(`SmartFix PI: no pattern found for type "${preview.mediaType}"`);
+      return;
+    }
+
+    try {
+      const fn = preview.createFolderStructure
+        ? organizeWithFolderStructure
+        : renameFolder;
+
+      const result = await fn(preview.folder, pattern, false);
+      const errorCount = Object.keys(result.errors).length;
+
+      if (errorCount > 0) {
+        await actionObj.showAlert();
+        streamDeck.logger.error("SmartFix PI apply errors:", result.errors);
+      } else {
+        await actionObj.showOk();
+      }
+
+      streamDeck.logger.info(
+        `SmartFix PI: applied last preview "${preview.patternLabel}" – renamed ${result.renamed}, skipped ${result.skipped}, errors ${errorCount}.`
+      );
+    } catch (err) {
+      await actionObj.showAlert();
+      streamDeck.logger.error("SmartFix PI: apply preview failed:", err);
+    }
+  }
+
+  /**
+   * Open the folder containing the MediaMaid log in the OS file browser.
+   */
+  private openLogFolder(): void {
+    const dir = dirname(getLogFilePath());
+    const cmd = process.platform === "win32"
+      ? `explorer "${dir}"`
+      : process.platform === "darwin"
+        ? `open "${dir}"`
+        : `xdg-open "${dir}"`;
+    exec(cmd, err => {
+      if (err) {
+        streamDeck.logger.error("SmartFix PI: could not open log folder:", err);
+      }
+    });
   }
 
   // ── Lifecycle ────────────────────────────────────────────────────
@@ -301,4 +388,3 @@ export class SmartFixAction extends SingletonAction<SmartFixSettings> {
     }
   }
 }
-

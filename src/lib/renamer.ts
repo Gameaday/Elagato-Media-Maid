@@ -17,6 +17,7 @@ import { MediaType } from "./patterns.js";
 import { findAndParseNfo } from "./nfo-parser.js";
 import { logOperation, flushLog } from "./logger.js";
 import { beginUndoSnapshot, recordUndoOperation, abandonUndoSnapshot } from "./undo-manager.js";
+import { saveLastPreview } from "./preview-store.js";
 import { withFsLock } from "./lock.js";
 import { moveFile } from "./fs-utils.js";
 import { validateFolderPath, RELEASE_TAG_RE, ROM_TAG_RE, ROM_REGION_RE, PLATFORM_MAP, RESOLUTION_RE, RESOLUTION_LABELS, SOURCE_TAG_RE, SOURCE_LABELS, HDR_TAG_RE, HDR_LABELS, YOUTUBE_ID_RE, ABSOLUTE_EPISODE_RE, COMIC_VOLUME_RE, COMIC_CHAPTER_RE } from "./config.js";
@@ -734,6 +735,23 @@ async function renameFolderInner(
     abandonUndoSnapshot(undoJournal);
   }
 
+  // Persist a summary of the dry run so the Smart Fix Property Inspector
+  // can preview what would change (#11). Best-effort write.
+  if (dryRun) {
+    saveLastPreview({
+      timestamp: new Date().toISOString(),
+      patternLabel: pattern.label,
+      mediaType: pattern.mediaType,
+      folder: folderPath,
+      createFolderStructure: false,
+      changed: result.operations
+        .filter(o => !o.unchanged)
+        .map(o => ({ from: o.from, to: o.to })),
+      unchangedCount: result.skipped,
+      errorCount: Object.keys(result.errors).length
+    });
+  }
+
   flushLog();
   return result;
 }
@@ -890,6 +908,23 @@ async function organizeWithFolderStructureInner(
   // Drop the journal again if the batch ended up doing nothing.
   if (undoJournal) {
     abandonUndoSnapshot(undoJournal);
+  }
+
+  // Persist a summary of the dry run for the Property Inspector preview
+  // (#11). Best-effort write.
+  if (dryRun) {
+    saveLastPreview({
+      timestamp: new Date().toISOString(),
+      patternLabel: pattern.label,
+      mediaType: pattern.mediaType,
+      folder: libraryRoot,
+      createFolderStructure: true,
+      changed: result.operations
+        .filter(o => !o.unchanged)
+        .map(o => ({ from: o.from, to: o.to })),
+      unchangedCount: result.skipped,
+      errorCount: Object.keys(result.errors).length
+    });
   }
 
   flushLog();
