@@ -3,6 +3,14 @@
  *
  * Analyzes a folder's file extensions, counts, and naming patterns to guess
  * the dominant media type so the correct renaming pattern can be applied.
+ *
+ * The folder is walked exactly ONCE: the walk collects extension counts and
+ * the names of all top-level entries, and every pattern counter (TV episode
+ * patterns, NFO presence, resolution tags, YouTube IDs, anime patterns,
+ * podcast patterns, comic patterns) is evaluated from that single
+ * in-memory snapshot — previously the same directory was read once for
+ * extension collection plus seven more times, one per pattern family.
+ * A file cap keeps the walk bounded on very large libraries.
  */
 
 import { readdir, stat } from "fs/promises";
@@ -27,6 +35,7 @@ import {
   COMIC_VOLUME_RE,
   COMIC_CHAPTER_RE,
   DETECTION_MAX_DEPTH,
+  DETECTION_MAX_FILES,
   validateFolderPath
 } from "./config.js";
 
@@ -40,21 +49,47 @@ export interface DetectionResult {
   extensionCounts: Record<string, number>;
 }
 
-// Extension sets are imported from config.ts (VIDEO_EXTS, PHOTO_EXTS, etc.)
+/** Everything the single detection walk learns about a folder. */
+interface FolderScan {
+  /** Extension counts across all walked files (recursive, up to maxDepth). */
+  extensionCounts: Record<string, number>;
+  /** Total number of counted files (files with an extension only, like the old extension walk). */
+  totalFiles: number;
+  /** Names of every top-level entry (files AND folders), for pattern tests. */
+  topLevelNames: string[];
+}
 
 /**
- * Recursively collect file extensions from a directory (up to maxDepth levels deep).
+ * Walk a directory once, collecting extension counts (recursive, up to
+ * maxDepth levels deep) and the names of all top-level entries. Symlinks
+ * are resolved via stat() so linked files and folders are still counted,
+ * exactly like the previous stat()-based walk did.
+ *
+ * The walk stops early once DETECTION_MAX_FILES files have been counted,
+ * so very large libraries cannot make a scan run unbounded.
  */
-async function collectExtensions(dir: string, depth = 0, maxDepth = DETECTION_MAX_DEPTH): Promise<Record<string, number>> {
-  const counts: Record<string, number> = {};
+async function scanFolder(
+  dir: string,
+  scan: FolderScan,
+  depth = 0,
+  maxDepth = DETECTION_MAX_DEPTH
+): Promise<void> {
+  if (scan.totalFiles >= DETECTION_MAX_FILES) return;
+
   let entries: Dirent[];
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch {
-    return counts;
+    return;
   }
 
   for (const entry of entries) {
+    // Top-level names feed the pattern counters below, exactly like the
+    // old one-readdir-per-pattern passes (which saw files AND folders).
+    if (depth === 0) {
+      scan.topLevelNames.push(entry.name);
+    }
+
     const fullPath = join(dir, entry.name);
     let isDir = entry.isDirectory();
     let isFile = entry.isFile();
@@ -72,19 +107,77 @@ async function collectExtensions(dir: string, depth = 0, maxDepth = DETECTION_MA
     }
 
     if (isDir && depth < maxDepth) {
-      const sub = await collectExtensions(fullPath, depth + 1, maxDepth);
-      for (const [ext, count] of Object.entries(sub)) {
-        counts[ext] = (counts[ext] ?? 0) + count;
-      }
+      await scanFolder(fullPath, scan, depth + 1, maxDepth);
     } else if (isFile) {
+      if (scan.totalFiles >= DETECTION_MAX_FILES) return;
       const ext = extname(entry.name).toLowerCase();
       if (ext) {
-        counts[ext] = (counts[ext] ?? 0) + 1;
+        scan.extensionCounts[ext] = (scan.extensionCounts[ext] ?? 0) + 1;
+        scan.totalFiles++;
       }
     }
   }
+}
 
-  return counts;
+/**
+ * Evaluate every naming-pattern counter from the single scan snapshot.
+ * Mirrors the semantics of the previous per-pattern readdir passes:
+ * name-only patterns (TV, YouTube, NFO) test every top-level entry,
+ * extension-gated patterns test only entries with a matching extension.
+ */
+function evaluatePatterns(scan: FolderScan): {
+  tvPatternCount: number;
+  nfoPresent: boolean;
+  resTaggedCount: number;
+  youtubeIdCount: number;
+  animePatternCount: number;
+  podcastPatternCount: number;
+  comicPatternCount: number;
+} {
+  let tvPatternCount = 0;
+  let nfoPresent = false;
+  let resTaggedCount = 0;
+  let youtubeIdCount = 0;
+  let animePatternCount = 0;
+  let podcastPatternCount = 0;
+  let comicPatternCount = 0;
+
+  for (const name of scan.topLevelNames) {
+    const ext = extname(name).toLowerCase();
+
+    if (TV_EPISODE_RE.test(name)) tvPatternCount++;
+    if (!nfoPresent && name.toLowerCase().endsWith(".nfo")) nfoPresent = true;
+    if (VIDEO_EXTS.has(ext) && RESOLUTION_RE.test(name)) resTaggedCount++;
+    if (YOUTUBE_ID_RE.test(name)) youtubeIdCount++;
+
+    if (VIDEO_EXTS.has(ext)) {
+      // Fansub group tags [SubGroup] at start, or absolute episode
+      // numbering without SxxExx — common anime naming.
+      const hasFansubTag = FANSUB_TAG_RE.test(name);
+      const hasAbsoluteEp = ABSOLUTE_EPISODE_RE.test(name) && !TV_EPISODE_RE.test(name);
+      if (hasFansubTag || hasAbsoluteEp) animePatternCount++;
+    }
+
+    // Audio-capable extension with a YYYY-MM-DD date in the name —
+    // typical podcast archive naming.
+    if (PODCAST_EXTS.has(ext) && DATE_FILENAME_RE.test(name)) podcastPatternCount++;
+
+    // Comic/manga naming goes beyond extension matching: volume/chapter
+    // or issue-number markers confirm the convention.
+    if (COMIC_EXTS.has(ext) && (COMIC_VOLUME_RE.test(name) || COMIC_CHAPTER_RE.test(name) || /#\d+/.test(name))) {
+      comicPatternCount++;
+    }
+  }
+
+  return {
+    tvPatternCount,
+    nfoPresent,
+    resTaggedCount,
+    youtubeIdCount,
+    animePatternCount,
+    podcastPatternCount,
+    comicPatternCount
+  };
 }
 
 /**
@@ -94,144 +187,6 @@ function countMatching(extCounts: Record<string, number>, extSet: Set<string>): 
   return Object.entries(extCounts)
     .filter(([ext]) => extSet.has(ext))
     .reduce((acc, [, n]) => acc + n, 0);
-}
-
-/**
- * Check how many filenames in the directory look like TV episode patterns.
- */
-async function countTvPatternMatches(dir: string): Promise<number> {
-  let matches = 0;
-  try {
-    const entries = await readdir(dir);
-    for (const name of entries) {
-      if (TV_EPISODE_RE.test(name)) matches++;
-    }
-  } catch {
-    // ignore read errors
-  }
-  return matches;
-}
-
-/**
- * Check for the presence of NFO companion files, which strongly indicate
- * Kodi/Jellyfin-managed media.
- */
-async function hasNfoFiles(dir: string): Promise<boolean> {
-  try {
-    const entries = await readdir(dir);
-    return entries.some(n => n.toLowerCase().endsWith(".nfo"));
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Count video files that contain resolution tags (e.g. "1080p", "2160p", "4K").
- * Multiple resolution-tagged videos in the same folder suggest a multi-version
- * movie collection.
- */
-async function countResolutionTaggedVideos(dir: string): Promise<number> {
-  let count = 0;
-  try {
-    const entries = await readdir(dir);
-    for (const name of entries) {
-      const ext = extname(name).toLowerCase();
-      if (VIDEO_EXTS.has(ext) && RESOLUTION_RE.test(name)) {
-        count++;
-      }
-    }
-  } catch {
-    // ignore read errors
-  }
-  return count;
-}
-
-/**
- * Count files that contain YouTube video IDs (11-character IDs in square brackets).
- * Multiple files with YouTube IDs suggest a yt-dlp download archive.
- */
-async function countYoutubeIdFiles(dir: string): Promise<number> {
-  let count = 0;
-  try {
-    const entries = await readdir(dir);
-    for (const name of entries) {
-      if (YOUTUBE_ID_RE.test(name)) {
-        count++;
-      }
-    }
-  } catch {
-    // ignore read errors
-  }
-  return count;
-}
-
-/**
- * Count filenames with absolute episode numbering patterns (common in anime).
- * Looks for patterns like " - 001", "[SubGroup]", or absolute numbering
- * without standard SxxExx format.
- */
-async function countAnimePatternMatches(dir: string): Promise<number> {
-  let count = 0;
-  try {
-    const entries = await readdir(dir);
-    for (const name of entries) {
-      const ext = extname(name).toLowerCase();
-      if (!VIDEO_EXTS.has(ext)) continue;
-      // Check for fansub group tags [SubGroup] at start
-      const hasFansubTag = FANSUB_TAG_RE.test(name);
-      // Check for absolute episode numbering without SxxExx
-      const hasAbsoluteEp = ABSOLUTE_EPISODE_RE.test(name) && !TV_EPISODE_RE.test(name);
-      if (hasFansubTag || hasAbsoluteEp) {
-        count++;
-      }
-    }
-  } catch {
-    // ignore read errors
-  }
-  return count;
-}
-
-/**
- * Count audio files that contain date patterns (YYYY-MM-DD) in their filenames.
- * Common for podcast archives organized by episode air date.
- */
-async function countPodcastPatternMatches(dir: string): Promise<number> {
-  let count = 0;
-  try {
-    const entries = await readdir(dir);
-    for (const name of entries) {
-      const ext = extname(name).toLowerCase();
-      // Must be an audio-capable extension AND have a date in the filename
-      if (PODCAST_EXTS.has(ext) && DATE_FILENAME_RE.test(name)) {
-        count++;
-      }
-    }
-  } catch {
-    // ignore read errors
-  }
-  return count;
-}
-
-/**
- * Count files that look like comic/manga naming (volume/chapter markers).
- * Goes beyond extension matching to verify naming conventions.
- */
-async function countComicPatternMatches(dir: string): Promise<number> {
-  let count = 0;
-  try {
-    const entries = await readdir(dir);
-    for (const name of entries) {
-      const ext = extname(name).toLowerCase();
-      if (!COMIC_EXTS.has(ext)) continue;
-      // Boost score if filename contains volume/chapter markers
-      if (COMIC_VOLUME_RE.test(name) || COMIC_CHAPTER_RE.test(name) || /#\d+/.test(name)) {
-        count++;
-      }
-    }
-  } catch {
-    // ignore read errors
-  }
-  return count;
 }
 
 /**
@@ -248,8 +203,12 @@ export async function detectMediaType(folderPath: string): Promise<DetectionResu
     };
   }
 
-  const extCounts = await collectExtensions(folderPath);
-  const totalFiles = Object.values(extCounts).reduce((a, b) => a + b, 0);
+  // One walk collects everything; every counter below is evaluated from
+  // this single snapshot instead of re-reading the folder per pattern.
+  const scan: FolderScan = { extensionCounts: {}, totalFiles: 0, topLevelNames: [] };
+  await scanFolder(folderPath, scan);
+  const extCounts = scan.extensionCounts;
+  const totalFiles = scan.totalFiles;
 
   if (totalFiles === 0) {
     return {
@@ -272,13 +231,16 @@ export async function detectMediaType(folderPath: string): Promise<DetectionResu
   const comicOnlyCount = [".cbz", ".cbr", ".cb7", ".cbt"]
     .reduce((acc, ext) => acc + (extCounts[ext] ?? 0), 0);
   const bookCount = countMatching(extCounts, EBOOK_EXTS) - comicOnlyCount;
-  const tvPatternCount = await countTvPatternMatches(folderPath);
-  const nfoPresent = await hasNfoFiles(folderPath);
-  const resTaggedCount = await countResolutionTaggedVideos(folderPath);
-  const youtubeIdCount = await countYoutubeIdFiles(folderPath);
-  const animePatternCount = await countAnimePatternMatches(folderPath);
-  const podcastPatternCount = await countPodcastPatternMatches(folderPath);
-  const comicPatternCount = await countComicPatternMatches(folderPath);
+
+  const {
+    tvPatternCount,
+    nfoPresent,
+    resTaggedCount,
+    youtubeIdCount,
+    animePatternCount,
+    podcastPatternCount,
+    comicPatternCount
+  } = evaluatePatterns(scan);
 
   // Score each type
   const scores: Array<{ type: MediaType; score: number; reason: string }> = [
@@ -415,4 +377,3 @@ export async function detectMediaType(folderPath: string): Promise<DetectionResu
     extensionCounts: extCounts
   };
 }
-
