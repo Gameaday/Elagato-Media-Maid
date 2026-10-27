@@ -30,6 +30,13 @@ export const DEFAULT_MAX_DEPTH = 5;
 /** Default maximum directory depth for extension collection (detection) */
 export const DETECTION_MAX_DEPTH = 1;
 
+/**
+ * Safety cap on the number of files a detection walk may count before it
+ * stops early. Keeps SmartFix responsive on very large libraries without
+ * affecting detection quality on normal folders.
+ */
+export const DETECTION_MAX_FILES = 5_000;
+
 /** Minimum auto-refresh interval for Library Stats (seconds) */
 export const MIN_REFRESH_INTERVAL_S = 30;
 
@@ -138,7 +145,7 @@ export const ROM_EXTS = new Set([
 export const RELEASE_TAG_RE = /\b(720p|1080p|2160p|4K|BluRay|WEB-?DL|HDTV|x264|x265|HEVC|AAC|DTS)\b.*/i;
 
 /**
- * Regex to extract resolution from a filename (e.g. "1080p", "2160p", "4K", "720p").
+ * Regex to extract resolution from a filename (e.g., "1080p", "2160p", "4K", "720p").
  * Captures the resolution token itself.
  */
 export const RESOLUTION_RE = /\b(720p|1080p|2160p|4K|480p|576p)\b/i;
