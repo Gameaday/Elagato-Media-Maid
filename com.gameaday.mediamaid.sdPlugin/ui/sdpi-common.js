@@ -55,6 +55,21 @@ function saveSettings(payload) {
 }
 
 /**
+ * Send a message to the plugin via WebSocket (#11).
+ * The plugin receives it in its onSendToPlugin handler.
+ * @param {object} payload – the message payload for the plugin
+ */
+function sendToPlugin(payload) {
+  if ($MM.websocket && $MM.websocket.readyState === WebSocket.OPEN) {
+    $MM.websocket.send(JSON.stringify({
+      event: "sendToPlugin",
+      context: $MM.uuid,
+      payload: payload
+    }));
+  }
+}
+
+/**
  * Standard Stream Deck PI connection function.
  * Called automatically by the Stream Deck application.
  *
@@ -82,6 +97,11 @@ function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegist
       event: inRegisterEvent,
       uuid: $MM.uuid
     }));
+    // PI panels can request initial data from the plugin once the socket
+    // is actually open (e.g. the dry-run preview, #11).
+    if (typeof onPiSocketOpen === "function") {
+      onPiSocketOpen();
+    }
   };
 
   $MM.websocket.onmessage = function (evt) {
@@ -89,6 +109,11 @@ function connectElgatoStreamDeckSocket(inPort, inPropertyInspectorUUID, inRegist
     if (msg.event === "didReceiveSettings") {
       if (typeof onSettingsLoaded === "function") {
         onSettingsLoaded(msg.payload.settings || {});
+      }
+    } else if (msg.event === "sendToPropertyInspector") {
+      // Message pushed by the plugin (e.g. dry-run preview, #11)
+      if (typeof onPluginMessage === "function") {
+        onPluginMessage(msg.payload || {});
       }
     }
   };

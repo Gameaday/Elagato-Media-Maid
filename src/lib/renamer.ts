@@ -3,6 +3,10 @@
  *
  * Applies a NamingPattern to every matching file in a target folder.
  * Supports dry-run mode (preview only) and returns all operations for undo.
+ *
+ * Undo batches are journaled crash-safe (#7): the snapshot is persisted
+ * before the first file moves and updated after every successful
+ * operation, so a crash mid-batch is still fully revertible.
  */
 
 import { mkdir, readdir, stat } from "fs/promises";
@@ -12,7 +16,8 @@ import type { NamingPattern, FileMetadata } from "./patterns.js";
 import { MediaType } from "./patterns.js";
 import { findAndParseNfo } from "./nfo-parser.js";
 import { logOperation, flushLog } from "./logger.js";
-import { createSnapshot, pushUndoSnapshot, type FileOperation } from "./undo-manager.js";
+import { beginUndoSnapshot, recordUndoOperation, abandonUndoSnapshot } from "./undo-manager.js";
+import { saveLastPreview } from "./preview-store.js";
 import { withFsLock } from "./lock.js";
 import { moveFile } from "./fs-utils.js";
 import { validateFolderPath, RELEASE_TAG_RE, ROM_TAG_RE, ROM_REGION_RE, PLATFORM_MAP, RESOLUTION_RE, RESOLUTION_LABELS, SOURCE_TAG_RE, SOURCE_LABELS, HDR_TAG_RE, HDR_LABELS, YOUTUBE_ID_RE, ABSOLUTE_EPISODE_RE, COMIC_VOLUME_RE, COMIC_CHAPTER_RE } from "./config.js";
@@ -169,7 +174,7 @@ export function parseYearFromFilename(baseName: string): number | undefined {
 /**
  * Parse video resolution from a filename.
  * Handles tokens like "1080p", "2160p", "4K", "720p", "480p", "576p".
- * Returns a normalised label (e.g. "4K" for both "2160p" and "4K").
+ * Returns a normalised label (e.g., "4K" for both "2160p" and "4K").
  */
 export function parseResolutionFromFilename(baseName: string): string | undefined {
   const m = RESOLUTION_RE.exec(baseName);
@@ -179,7 +184,7 @@ export function parseResolutionFromFilename(baseName: string): string | undefine
 }
 
 /**
- * Parse the video source tag from a filename (e.g. "BluRay", "WEB-DL", "REMUX").
+ * Parse the video source tag from a filename (e.g., "BluRay", "WEB-DL", "REMUX").
  * Returns a normalised label.
  */
 export function parseSourceFromFilename(baseName: string): string | undefined {
@@ -190,7 +195,7 @@ export function parseSourceFromFilename(baseName: string): string | undefined {
 }
 
 /**
- * Parse HDR/dynamic-range tag from a filename (e.g. "HDR", "HDR10+", "DV").
+ * Parse HDR/dynamic-range tag from a filename (e.g., "HDR", "HDR10+", "DV").
  * Returns a normalised label.
  */
 export function parseHdrFromFilename(baseName: string): string | undefined {
@@ -203,7 +208,7 @@ export function parseHdrFromFilename(baseName: string): string | undefined {
 /**
  * Build a full Jellyfin-style version tag from filename components.
  * Combines resolution, source, and HDR info into a single bracket tag.
- * E.g. "1080p Bluray", "4K HDR", "2160p Bluray Remux DV"
+ * E.g., "1080p Bluray", "4K HDR", "2160p Bluray Remux DV"
  */
 export function buildVersionTag(baseName: string): string | undefined {
   const parts: string[] = [];
@@ -218,7 +223,7 @@ export function buildVersionTag(baseName: string): string | undefined {
 
 /**
  * Extract a clean movie title from a filename by stripping year, resolution, and release tags.
- * E.g. "Inception.2010.1080p.BluRay.x264" → "Inception"
+ * E.g., "Inception.2010.1080p.BluRay.x264" → "Inception"
  */
 export function parseMovieTitle(baseName: string): string {
   return baseName
@@ -648,7 +653,11 @@ async function renameFolderInner(
     entries.map(e => join(folderPath, e.name))
   );
 
-  const undoOps: FileOperation[] = [];
+  // Crash-safe undo journal (#7): persist the snapshot BEFORE the batch
+  // starts, then update it after every successful operation. A crash at
+  // any point leaves a revertible entry covering exactly the renames
+  // that already happened. Dry runs never touch the undo stack.
+  const undoJournal = dryRun ? undefined : beginUndoSnapshot(`Quick Rename – ${pattern.label}`);
 
   for (let i = 0; i < targetFiles.length; i++) {
     const name = targetFiles[i];
@@ -697,7 +706,9 @@ async function renameFolderInner(
         await moveFile(fromPath, toPath);
         existingPaths.delete(fromPath);
         existingPaths.add(toPath);
-        undoOps.push({ type: "rename", from: fromPath, to: toPath });
+        if (undoJournal) {
+          recordUndoOperation(undoJournal, { type: "rename", from: fromPath, to: toPath });
+        }
         result.renamed++;
         logOperation({ operation: "rename", from: fromPath, to: toPath, message: "OK" });
       } catch (err) {
@@ -718,8 +729,27 @@ async function renameFolderInner(
     }
   }
 
-  if (!dryRun && undoOps.length > 0) {
-    pushUndoSnapshot(createSnapshot(`Quick Rename – ${pattern.label}`, undoOps));
+  // The journal was already persisted per-operation; if nothing ended up
+  // being renamed, drop the empty entry again.
+  if (undoJournal) {
+    abandonUndoSnapshot(undoJournal);
+  }
+
+  // Persist a summary of the dry run so the Smart Fix Property Inspector
+  // can preview what would change (#11). Best-effort write.
+  if (dryRun) {
+    saveLastPreview({
+      timestamp: new Date().toISOString(),
+      patternLabel: pattern.label,
+      mediaType: pattern.mediaType,
+      folder: folderPath,
+      createFolderStructure: false,
+      changed: result.operations
+        .filter(o => !o.unchanged)
+        .map(o => ({ from: o.from, to: o.to })),
+      unchangedCount: result.skipped,
+      errorCount: Object.keys(result.errors).length
+    });
   }
 
   flushLog();
@@ -797,7 +827,9 @@ async function organizeWithFolderStructureInner(
     targetFiles.push(entry.name);
   }
 
-  const undoOps: FileOperation[] = [];
+  // Crash-safe undo journal (#7): persisted before the batch, updated
+  // after every successful move/mkdir (see renameFolderInner).
+  const undoJournal = dryRun ? undefined : beginUndoSnapshot(`Organize – ${pattern.label}`);
   const createdDirs = new Set<string>();
   // Target names already claimed within this batch, so dry-run
   // deconfliction matches what a real run would produce.
@@ -846,11 +878,15 @@ async function organizeWithFolderStructureInner(
         const dirExisted = await pathExists(targetDir);
         await mkdir(targetDir, { recursive: true });
         if (!dirExisted && !createdDirs.has(targetDir)) {
-          undoOps.push({ type: "mkdir", from: "", to: targetDir });
+          if (undoJournal) {
+            recordUndoOperation(undoJournal, { type: "mkdir", from: "", to: targetDir });
+          }
           createdDirs.add(targetDir);
         }
         await moveFile(fromPath, toPath);
-        undoOps.push({ type: "move", from: fromPath, to: toPath });
+        if (undoJournal) {
+          recordUndoOperation(undoJournal, { type: "move", from: fromPath, to: toPath });
+        }
         result.renamed++;
         logOperation({ operation: "move", from: fromPath, to: toPath, message: "OK" });
       } catch (err) {
@@ -869,11 +905,28 @@ async function organizeWithFolderStructureInner(
     }
   }
 
-  if (!dryRun && undoOps.length > 0) {
-    pushUndoSnapshot(createSnapshot(`Organize – ${pattern.label}`, undoOps));
+  // Drop the journal again if the batch ended up doing nothing.
+  if (undoJournal) {
+    abandonUndoSnapshot(undoJournal);
+  }
+
+  // Persist a summary of the dry run for the Property Inspector preview
+  // (#11). Best-effort write.
+  if (dryRun) {
+    saveLastPreview({
+      timestamp: new Date().toISOString(),
+      patternLabel: pattern.label,
+      mediaType: pattern.mediaType,
+      folder: libraryRoot,
+      createFolderStructure: true,
+      changed: result.operations
+        .filter(o => !o.unchanged)
+        .map(o => ({ from: o.from, to: o.to })),
+      unchangedCount: result.skipped,
+      errorCount: Object.keys(result.errors).length
+    });
   }
 
   flushLog();
   return result;
 }
-
